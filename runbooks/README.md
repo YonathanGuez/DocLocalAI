@@ -68,14 +68,17 @@ The system automatically:
 - Stores in PostgreSQL with pgvector
 - Retrieves relevant chunks during chat conversations
 
+---
+
 ## Recommended Structure for Optimal RAG Performance
 
 ---
 
+````
 # [Title] - Main Topic Name
 
-**Last Updated:** 2026-11-23  
-**Category:** Infrastructure / Networking / Troubleshooting / etc.  
+**Last Updated:** 2026-11-23
+**Category:** Infrastructure / Networking / Troubleshooting / etc.
 **Tags:** kubernetes, openshift, pods, debugging
 
 ## Overview
@@ -189,6 +192,7 @@ kubectl get secrets -n production
 - Official Kubernetes Docs: https://kubernetes.io/docs/concepts/workloads/pods/
 - Internal Wiki: https://wiki.company.com/k8s-troubleshooting
 - Runbook maintained by: Platform Team
+````
 
 ---
 
@@ -208,7 +212,6 @@ kubectl get secrets -n production
 
 ### 2. Code Blocks with Language Tags
 
-`````markdown
 ````bash
 kubectl get pods
 \`\`\`
@@ -218,9 +221,6 @@ apiVersion: v1
 kind: Pod
 \`\`\`
 ````
-`````
-
-`````
 
 ### 3. Lists for Steps or Prerequisites
 
@@ -296,7 +296,7 @@ Some commands with no formatting at all
 
 If you want to keep it simple, this minimal structure works:
 
-````markdown
+`````markdown
 # How to Restart a Pod
 
 ## Problem
@@ -354,9 +354,8 @@ Grafana dashboard: https://grafana.company.com/d/router-metrics
 ## References
 - Internal docs: wiki.company.com/openshift-routers
 - Maintained by: Platform Team (platform@company.com)
-`````
-
 ````
+`````
 
 ---
 
@@ -403,4 +402,3 @@ Good names for searchability:
 - Validation/verification steps
 - Troubleshooting decision tree
 - Version tracking in filename or header
-````
