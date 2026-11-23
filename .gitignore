@@ -1,5 +1,14 @@
-./frontend/requirements.txt.backup.*
-./backend/requirements.txt.backup.*
-./pipeline
-./pipeline/push-registry.sh
-./runbooks/*.md
+# Backup files
+frontend/requirements.txt.backup.*
+backend/requirements.txt.backup.*
+
+# Pipeline scripts
+
+pipeline/*
+
+# Runbooks (sample data - keep structure, ignore content)
+runbooks/*.md
+runbooks/*.txt
+
+# Keep README for runbooks directory
+!runbooks/README.md

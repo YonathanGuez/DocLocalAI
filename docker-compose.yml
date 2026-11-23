@@ -1,0 +1,122 @@
+services:
+  doclocalai-db:
+    image: pgvector/pgvector:pg16
+    container_name: doclocalai-db
+    environment:
+      POSTGRES_USER: doclocalai
+      POSTGRES_PASSWORD: localdevpassword
+      POSTGRES_DB: doclocalai
+    ports:
+      - "5432:5432"
+    volumes:
+      - doclocalai_pgdata:/var/lib/postgresql/data
+      - ./doclocalai-app/db/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doclocalai -d doclocalai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: doclocalai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - doclocalai_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: doclocalai-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Pulling tiny chat model (qwen2.5:0.5b ~400MB)..."
+        ollama pull qwen2.5:0.5b
+        echo "Pulling embedding model (nomic-embed-text ~270MB)..."
+        ollama pull nomic-embed-text
+        echo "Local models ready."
+
+  doclocalai-api:
+    build:
+      context: ./app/backend
+    container_name: doclocalai-api
+    depends_on:
+      doclocalai-db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://doclocalai:localdevpassword@doclocalai-db:5432/doclocalai
+      LLM_ENDPOINT_URL: http://ollama:11434/v1
+      LLM_MODEL_NAME: qwen2.5:0.5b
+      LLM_API_TOKEN: ollama-local-token
+      EMBEDDING_ENDPOINT_URL: http://ollama:11434/v1
+      EMBEDDING_MODEL_NAME: nomic-embed-text
+      APP_TITLE: "doclocalai — Runbook Assistant"
+      HISTORY_WINDOW_SIZE: "12"
+      RAG_STRATEGY: "auto" # auto, raw, or synthesis
+      SIMILARITY_THRESHOLD: "0.4" # 0.0-1.0, minimum relevance to show results
+      RUNBOOK_DIR: /runbooks
+      RUNBOOK_UPLOAD_DIR: /runbooks-uploads
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./scripts:/scripts:z
+      - ./runbooks:/runbooks:ro,z # Read-only: sample runbooks
+      - runbooks_uploads:/runbooks-uploads:z # Read-write: user uploads
+
+  runbook-indexer:
+    build:
+      context: ./app/backend
+    container_name: doclocalai-runbook-indexer
+    depends_on:
+      doclocalai-db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://doclocalai:localdevpassword@doclocalai-db:5432/doclocalai
+      EMBEDDING_ENDPOINT_URL: http://ollama:11434/v1
+      EMBEDDING_MODEL_NAME: nomic-embed-text
+      RUNBOOK_DIR: /runbooks
+      RUNBOOK_UPLOAD_DIR: /runbooks-uploads
+    volumes:
+      - ./scripts:/scripts:z
+      - ./runbooks:/runbooks:z
+      - runbooks_uploads:/runbooks-uploads:z
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "🔍 Indexing runbooks..."
+        ls -la /runbooks/ || echo "Cannot list runbooks dir"
+        python3 /scripts/index_runbooks.py
+        echo "✅ Runbooks indexed successfully!"
+
+  doclocalai-ui:
+    build:
+      context: ./app/frontend
+    container_name: doclocalai-ui
+    depends_on:
+      - doclocalai-api
+    environment:
+      DOCLOCALAI_API_URL: http://doclocalai-api:8000
+      APP_TITLE: "doclocalai — OpenShift Incident & Runbook Assistant"
+      APP_PAGE_TITLE: "doclocalai SRE Assistant"
+    ports:
+      - "8501:8501"
+
+volumes:
+  doclocalai_pgdata:
+  doclocalai_ollama:
+  runbooks_uploads:
