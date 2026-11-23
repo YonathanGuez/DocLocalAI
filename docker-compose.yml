@@ -56,6 +56,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://doclocalai:localdevpassword@doclocalai-db:5432/doclocalai
       LLM_ENDPOINT_URL: http://ollama:11434/v1
@@ -85,6 +87,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://doclocalai:localdevpassword@doclocalai-db:5432/doclocalai
       EMBEDDING_ENDPOINT_URL: http://ollama:11434/v1
@@ -111,8 +115,8 @@ services:
       - doclocalai-api
     environment:
       DOCLOCALAI_API_URL: http://doclocalai-api:8000
-      APP_TITLE: "doclocalai — OpenShift Incident & Runbook Assistant"
-      APP_PAGE_TITLE: "doclocalai SRE Assistant"
+      APP_TITLE: "DocLocalAI — OpenShift Incident & Runbook Assistant"
+      APP_PAGE_TITLE: "DocLocalAI Assistant"
     ports:
       - "8501:8501"
 

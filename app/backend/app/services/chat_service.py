@@ -190,6 +190,9 @@ class ChatService:
 
             return response
         except Exception as e:
+            print(f"❌ LLM error: {e}")
+            import traceback
+            traceback.print_exc()
             raise LLMException(f"LLM completion failed: {str(e)}")
 
     def process_chat(

@@ -24,4 +24,7 @@ class EmbeddingService:
             )
             return response.data[0].embedding
         except Exception as e:
+            print(f"❌ Embedding error: {e}")
+            import traceback
+            traceback.print_exc()
             raise LLMException(f"Embedding generation failed: {str(e)}")
