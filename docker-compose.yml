@@ -10,7 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - doclocalai_pgdata:/var/lib/postgresql/data
-      - ./doclocalai-app/db/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
+      - ./app/db/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U doclocalai -d doclocalai"]
       interval: 5s
