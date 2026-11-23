@@ -1,0 +1,5 @@
+./frontend/requirements.txt.backup.*
+./backend/requirements.txt.backup.*
+./pipeline
+./pipeline/push-registry.sh
+./runbooks/*.md
