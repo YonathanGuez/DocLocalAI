@@ -1,7 +1,7 @@
 services:
-  doclocalai-db:
+  db:
     image: pgvector/pgvector:pg16
-    container_name: doclocalai-db
+    container_name: db
     environment:
       POSTGRES_USER: doclocalai
       POSTGRES_PASSWORD: localdevpassword
@@ -19,11 +19,11 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    container_name: doclocalai-ollama
+    container_name: ollama
     ports:
       - "11434:11434"
     volumes:
-      - doclocalai_ollama:/root/.ollama
+      - ollama:/root/.ollama
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 5s
@@ -32,7 +32,7 @@ services:
 
   ollama-init:
     image: ollama/ollama:latest
-    container_name: doclocalai-ollama-init
+    container_name: ollama-init
     depends_on:
       ollama:
         condition: service_healthy
@@ -47,19 +47,19 @@ services:
         ollama pull nomic-embed-text
         echo "Local models ready."
 
-  doclocalai-api:
+  api:
     build:
       context: ./app/backend
-    container_name: doclocalai-api
+    container_name: api
     depends_on:
-      doclocalai-db:
+      db:
         condition: service_healthy
       ollama:
         condition: service_healthy
       ollama-init:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgresql://doclocalai:localdevpassword@doclocalai-db:5432/doclocalai
+      DATABASE_URL: postgresql://doclocalai:localdevpassword@db:5432/doclocalai
       LLM_ENDPOINT_URL: http://ollama:11434/v1
       LLM_MODEL_NAME: qwen2.5:0.5b
       LLM_API_TOKEN: ollama-local-token
@@ -81,16 +81,16 @@ services:
   runbook-indexer:
     build:
       context: ./app/backend
-    container_name: doclocalai-runbook-indexer
+    container_name: runbook-indexer
     depends_on:
-      doclocalai-db:
+      db:
         condition: service_healthy
       ollama:
         condition: service_healthy
       ollama-init:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgresql://doclocalai:localdevpassword@doclocalai-db:5432/doclocalai
+      DATABASE_URL: postgresql://doclocalai:localdevpassword@db:5432/doclocalai
       EMBEDDING_ENDPOINT_URL: http://ollama:11434/v1
       EMBEDDING_MODEL_NAME: nomic-embed-text
       RUNBOOK_DIR: /runbooks
@@ -107,14 +107,14 @@ services:
         python3 /scripts/index_runbooks.py
         echo "✅ Runbooks indexed successfully!"
 
-  doclocalai-ui:
+  ui:
     build:
       context: ./app/frontend
-    container_name: doclocalai-ui
+    container_name: ui
     depends_on:
-      - doclocalai-api
+      - api
     environment:
-      DOCLOCALAI_API_URL: http://doclocalai-api:8000
+      DOCLOCALAI_API_URL: http://api:8000
       APP_TITLE: "DocLocalAI — OpenShift Incident & Runbook Assistant"
       APP_PAGE_TITLE: "DocLocalAI Assistant"
     ports:
@@ -122,5 +122,5 @@ services:
 
 volumes:
   doclocalai_pgdata:
-  doclocalai_ollama:
+  ollama:
   runbooks_uploads:
