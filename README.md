@@ -1,9 +1,11 @@
-# DocLocalAI — OpenShift Knowledge Assistant
+# DocLocalAI — Knowledge Assistant
 
-> Local RAG-powered OpenShift troubleshooting assistant with PostgreSQL + pgvector, Ollama (LLM + embeddings), FastAPI backend, and Streamlit UI.
+> Local RAG-powered assistant with PostgreSQL + pgvector, Ollama (LLM + embeddings), FastAPI backend, and Streamlit UI.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+
+![screenshot](./doc/screen.png)
 
 ## 🆕 Recent Updates
 
@@ -141,21 +143,21 @@ podman-compose logs -f ollama-init
          │
 ┌────────▼─────────────────────┐
 │    FastAPI Backend           │  :8000
-│  ┌──────────────────────┐   │
-│  │ Routers             │   │
-│  │  ├─ sessions.py     │   │
-│  │  ├─ chat.py         │   │
-│  │  └─ runbooks.py     │   │  ← Upload/Delete triggers
-│  ├──────────────────────┤   │     auto-indexing
-│  │ Services            │   │
-│  │  ├─ chat_service    │   │
-│  │  └─ embedding       │   │
-│  ├──────────────────────┤   │
-│  │ Repositories        │   │
-│  │  ├─ session_repo    │   │
-│  │  ├─ message_repo    │   │
-│  │  └─ runbook_repo    │   │
-│  └──────────────────────┘   │
+│  ┌──────────────────────┐    │
+│  │ Routers             │     │
+│  │  ├─ sessions.py     │     │
+│  │  ├─ chat.py         │     │
+│  │  └─ runbooks.py     │     │  ← Upload/Delete triggers
+│  ├──────────────────────┤    │     auto-indexing
+│  │ Services            │     │
+│  │  ├─ chat_service    │     │
+│  │  └─ embedding       │     │
+│  ├──────────────────────┤    │
+│  │ Repositories        │     │
+│  │  ├─ session_repo    │     │
+│  │  ├─ message_repo    │     │
+│  │  └─ runbook_repo    │     │
+│  └──────────────────────┘    │
 └────┬────────────────┬────────┘
      │                │
 ┌────▼─────┐    ┌────▼──────────────┐
@@ -399,29 +401,28 @@ SIMILARITY_THRESHOLD: "0.4" # 0.0-1.0
    ### Diagnosis
    ```bash
    # Commands to investigate
-   ````
+   ```
 
    ### Solution
 
    Step-by-step resolution
    EOF
+   ````
 
-   ```
-
-   ```
+````
 
 2. **Re-index**:
 
-   ```bash
-   podman-compose restart runbook-indexer
-   podman logs DocLocalAI-runbook-indexer
-   ```
+ ```bash
+ podman-compose restart runbook-indexer
+ podman logs DocLocalAI-runbook-indexer
+ ```
 
 3. **Verify indexing**:
-   ```bash
-   podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
-     "SELECT source_doc, COUNT(*) FROM runbook_chunks GROUP BY source_doc;"
-   ```
+ ```bash
+ podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+   "SELECT source_doc, COUNT(*) FROM runbook_chunks GROUP BY source_doc;"
+ ```
 
 ### Storage Architecture
 
@@ -466,12 +467,12 @@ Run the complete test walkthrough:
 
 ## 🔒 Security Features
 
-✅ **Connection Pooling** - Prevents connection exhaustion  
-✅ **Input Validation** - UUID format, length constraints  
-✅ **SQL Injection Protection** - Parameterized queries  
-✅ **Rate Limiting** - 60 req/min per IP  
-✅ **CORS Protection** - Whitelist origins  
-✅ **Error Handling** - Proper exceptions with rollback  
+✅ **Connection Pooling** - Prevents connection exhaustion
+✅ **Input Validation** - UUID format, length constraints
+✅ **SQL Injection Protection** - Parameterized queries
+✅ **Rate Limiting** - 60 req/min per IP
+✅ **CORS Protection** - Whitelist origins
+✅ **Error Handling** - Proper exceptions with rollback
 ✅ **Environment Secrets** - No hardcoded credentials
 
 ---
@@ -538,3 +539,4 @@ Contributions welcome! Please:
 ## ⭐ Star History
 
 If you find this project useful, please consider giving it a star!
+````
