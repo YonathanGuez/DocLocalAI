@@ -128,50 +128,65 @@ podman-compose logs -f ollama-init
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────┐
-│   Browser       │
-└────────┬────────┘
-         │
-┌────────▼────────┐
-│  Streamlit UI   │  :8501
-│  - Chat         │
-│  - Sessions     │
-│  - Upload       │
-│  - View Docs    │
-└────────┬────────┘
-         │
-┌────────▼─────────────────────┐
-│    FastAPI Backend           │  :8000
-│  ┌──────────────────────┐    │
-│  │ Routers             │     │
-│  │  ├─ sessions.py     │     │
-│  │  ├─ chat.py         │     │
-│  │  └─ runbooks.py     │     │  ← Upload/Delete triggers
-│  ├──────────────────────┤    │     auto-indexing
-│  │ Services            │     │
-│  │  ├─ chat_service    │     │
-│  │  └─ embedding       │     │
-│  ├──────────────────────┤    │
-│  │ Repositories        │     │
-│  │  ├─ session_repo    │     │
-│  │  ├─ message_repo    │     │
-│  │  └─ runbook_repo    │     │
-│  └──────────────────────┘    │
-└────┬────────────────┬────────┘
-     │                │
-┌────▼─────┐    ┌────▼──────────────┐
-│PostgreSQL│    │     Ollama        │  :11434
-│+ pgvector│    │  - qwen2.5:0.5b   │
-│          │    │  - nomic-embed    │
-│Sessions  │    └───────────────────┘
-│Messages  │
-│Runbooks  │    ┌───────────────────┐
-└──────────┘    │ Auto-Indexer      │
-                │  - On upload      │
-                │  - On delete      │
-                │  - Cleanup orphans│
-                └───────────────────┘
+```mermaid
+graph TB
+    Browser[🌐 Browser]
+    
+    subgraph UI["Streamlit UI :8501"]
+        Chat[💬 Chat Interface]
+        Sessions[📋 Session Management]
+        Upload[📤 Upload Runbooks]
+        ViewDocs[📖 View Documentation]
+    end
+    
+    subgraph Backend["FastAPI Backend :8000"]
+        subgraph Routers
+            SessionRouter[sessions.py]
+            ChatRouter[chat.py]
+            RunbookRouter[runbooks.py]
+        end
+        
+        subgraph Services
+            ChatService[chat_service]
+            EmbeddingService[embedding]
+        end
+        
+        subgraph Repositories
+            SessionRepo[session_repo]
+            MessageRepo[message_repo]
+            RunbookRepo[runbook_repo]
+        end
+    end
+    
+    subgraph Database["PostgreSQL + pgvector :5432"]
+        Sessions_DB[(Sessions)]
+        Messages_DB[(Messages)]
+        Runbooks_DB[(Runbooks)]
+    end
+    
+    subgraph LLM["Ollama :11434"]
+        Model[🤖 qwen2.5:0.5b]
+        Embeddings[🔤 nomic-embed-text]
+    end
+    
+    Indexer[🔄 Auto-Indexer<br/>- On upload<br/>- On delete<br/>- Cleanup orphans]
+    
+    Browser --> UI
+    UI --> Routers
+    Routers --> Services
+    Services --> Repositories
+    Repositories --> Database
+    Services --> LLM
+    RunbookRouter -.->|triggers| Indexer
+    Indexer --> Database
+    Indexer --> LLM
+    
+    style Browser fill:#e1f5ff
+    style UI fill:#fff4e6
+    style Backend fill:#f3e5f5
+    style Database fill:#e8f5e9
+    style LLM fill:#fce4ec
+    style Indexer fill:#fff9c4
 ```
 
 **Stack:**
