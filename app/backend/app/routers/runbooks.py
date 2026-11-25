@@ -166,7 +166,7 @@ async def upload_runbook(file: UploadFile = File(...), auto_index: bool = True):
 
         # Trigger re-indexing in background if requested
         if auto_index:
-            indexer_script = Path("/scripts/index_runbooks.py")
+            indexer_script = Path("/opt/app-root/src/scripts/index_runbooks.py")
             if indexer_script.exists():
                 subprocess.Popen(
                     ["python3", str(indexer_script)],
@@ -220,7 +220,7 @@ def delete_runbook(filename: str):
         file_path.unlink()
 
         # Trigger re-indexing in background
-        indexer_script = Path("/scripts/index_runbooks.py")
+        indexer_script = Path("/opt/app-root/src/scripts/index_runbooks.py")
         if indexer_script.exists():
             subprocess.Popen(
                 ["python3", str(indexer_script)],
@@ -248,7 +248,7 @@ def trigger_reindex():
     """Trigger runbook re-indexing"""
     try:
         # Try to call the indexer script
-        indexer_script = Path("/scripts/index_runbooks.py")
+        indexer_script = Path("/opt/app-root/src/scripts/index_runbooks.py")
 
         if not indexer_script.exists():
             return {

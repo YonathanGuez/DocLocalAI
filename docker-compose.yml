@@ -74,7 +74,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./scripts:/scripts:z
+      - ./app/backend/scripts:/opt/app-root/src/scripts:z
       - ./runbooks:/runbooks:ro,z # Read-only: sample runbooks
       - runbooks_uploads:/runbooks-uploads:z # Read-write: user uploads
 
@@ -96,7 +96,7 @@ services:
       RUNBOOK_DIR: /runbooks
       RUNBOOK_UPLOAD_DIR: /runbooks-uploads
     volumes:
-      - ./scripts:/scripts:z
+      - ./app/backend/scripts:/opt/app-root/src/scripts:z
       - ./runbooks:/runbooks:z
       - runbooks_uploads:/runbooks-uploads:z
     entrypoint: ["/bin/sh", "-c"]
@@ -104,7 +104,7 @@ services:
       - |
         echo "🔍 Indexing runbooks..."
         ls -la /runbooks/ || echo "Cannot list runbooks dir"
-        python3 /scripts/index_runbooks.py
+        python3 /opt/app-root/src/scripts/index_runbooks.py
         echo "✅ Runbooks indexed successfully!"
 
   ui:
