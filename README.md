@@ -181,12 +181,12 @@ graph TB
     Indexer --> Database
     Indexer --> LLM
     
-    style Browser fill:#e1f5ff
-    style UI fill:#fff4e6
-    style Backend fill:#f3e5f5
-    style Database fill:#e8f5e9
-    style LLM fill:#fce4ec
-    style Indexer fill:#fff9c4
+    style Browser fill:#bdbdbd,stroke:#616161,stroke-width:2px,color:#000
+    style UI fill:#ffb74d,stroke:#f57c00,stroke-width:2px,color:#000
+    style Backend fill:#64b5f6,stroke:#1976d2,stroke-width:2px,color:#000
+    style Database fill:#81c784,stroke:#388e3c,stroke-width:2px,color:#000
+    style LLM fill:#f06292,stroke:#c2185b,stroke-width:2px,color:#000
+    style Indexer fill:#fff176,stroke:#f9a825,stroke-width:2px,color:#000
 ```
 
 **Stack:**
