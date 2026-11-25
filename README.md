@@ -281,7 +281,7 @@ Edit `docker-compose.yml`:
 ```yaml
 environment:
   # Database
-  DATABASE_URL: postgresql://DocLocalAI:password@db:5432/DocLocalAI
+  DATABASE_URL: postgresql://doclocalai:password@db:5432/doclocalai
   DB_POOL_MIN_SIZE: 2
   DB_POOL_MAX_SIZE: 10
 
@@ -318,13 +318,13 @@ environment:
 
 ```bash
 # Install 3B model (better quality, 2GB)
-podman exec DocLocalAI-ollama ollama pull qwen2.5:3b
+podman exec doclocalai-ollama ollama pull qwen2.5:3b
 
 # Update docker-compose.yml
 LLM_MODEL_NAME: qwen2.5:3b
 
 # Restart
-podman-compose up -d DocLocalAI-api
+podman-compose up -d doclocalai-api
 ```
 
 **Available models:**
@@ -417,13 +417,13 @@ SIMILARITY_THRESHOLD: "0.4" # 0.0-1.0
 
 ```bash
 podman-compose restart runbook-indexer
-podman logs DocLocalAI-runbook-indexer
+podman logs doclocalai-runbook-indexer
 ```
 
 3. **Verify indexing**:
 
 ```bash
-podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+podman exec doclocalai-db psql -U doclocalai -d doclocalai -c \
   "SELECT source_doc, COUNT(*) FROM runbook_chunks GROUP BY source_doc;"
 ```
 
@@ -508,7 +508,7 @@ Run the complete test walkthrough:
 
 ## 📝 Credentials (Local Development)
 
-- **PostgreSQL**: `DocLocalAI` / `localdevpassword` / DB `DocLocalAI`
+- **PostgreSQL**: `doclocalai` / `localdevpassword` / DB `doclocalai`
 - **Ollama**: No authentication required (local only)
 
 ---
