@@ -1,0 +1,46 @@
+---
+# BGE Small EN v1.5 - LLMInferenceService (Embeddings)
+# Full UI integration with hardware profile and connection
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: bge-llm
+  namespace: doclocal-ai-models
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    opendatahub.io/connections: "bge"
+    opendatahub.io/hardware-profile-name: "gpu-profile"
+    opendatahub.io/hardware-profile-namespace: "redhat-ods-applications"
+    opendatahub.io/model-type: "generative"
+    openshift.io/display-name: "BGE Small EN v1.5 (Embeddings)"
+    security.opendatahub.io/enable-auth: "false"
+spec:
+  model:
+    name: bge-llm
+    uri: hf://BAAI/bge-small-en-v1.5
+  replicas: 1
+  router:
+    gateway: {}
+    route: {}
+    scheduler: {}
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HF_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: huggingface-token
+            key: HF_TOKEN
+      - name: VLLM_TASK
+        value: "embed"
+      resources:
+        requests:
+          cpu: "2"
+          memory: 4Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "4"
+          memory: 8Gi
+          nvidia.com/gpu: "1"
