@@ -22,10 +22,10 @@ podman ps --format "table {{.Names}}\t{{.Status}}"
 
 ```
 NAMES           STATUS
-DocLocalAI-db      Up X minutes (healthy)
-DocLocalAI-ollama  Up X minutes (healthy)
-DocLocalAI-api     Up X minutes
-DocLocalAI-ui      Up X minutes
+doclocalai-db      Up X minutes (healthy)
+doclocalai-ollama  Up X minutes (healthy)
+doclocalai-api     Up X minutes
+doclocalai-ui      Up X minutes
 ```
 
 ✅ **All 4 services should be running**
@@ -37,7 +37,7 @@ DocLocalAI-ui      Up X minutes
 Check how many runbook chunks are stored:
 
 ```bash
-podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+podman exec doclocalai-db psql -U doclocalai -d doclocalai -c \
   "SELECT COUNT(*) as total_chunks FROM runbook_chunks;"
 ```
 
@@ -52,7 +52,7 @@ podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
 See which runbooks are indexed:
 
 ```bash
-podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+podman exec doclocalai-db psql -U doclocalai -d doclocalai -c \
   "SELECT source_doc, COUNT(*) as chunks FROM runbook_chunks GROUP BY source_doc ORDER BY source_doc;"
 ```
 
@@ -75,7 +75,7 @@ podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
 Let's see what kind of content is indexed:
 
 ```bash
-podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+podman exec doclocalai-db psql -U doclocalai -d doclocalai -c \
   "SELECT source_doc, substring(content, 1, 150) as preview FROM runbook_chunks WHERE source_doc = 'openshift-pod-troubleshooting.md' LIMIT 3;"
 ```
 
@@ -114,7 +114,7 @@ Let's manually test if the vector search retrieves relevant content.
 First, check if embeddings exist:
 
 ```bash
-podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+podman exec doclocalai-db psql -U doclocalai -d doclocalai -c \
   "SELECT source_doc, chunk_index, (embedding IS NOT NULL) as has_embedding FROM runbook_chunks LIMIT 5;"
 ```
 
@@ -249,7 +249,7 @@ The AI should again provide specific troubleshooting steps from the runbook, inc
 Your conversation should be persisted in PostgreSQL:
 
 ```bash
-podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+podman exec doclocalai-db psql -U doclocalai -d doclocalai -c \
   "SELECT title, created_at FROM chat_sessions ORDER BY created_at DESC LIMIT 5;"
 ```
 
@@ -264,7 +264,7 @@ podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
 Check the messages:
 
 ```bash
-podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+podman exec doclocalai-db psql -U doclocalai -d doclocalai -c \
   "SELECT role, substring(content, 1, 80) as message_preview FROM chat_messages ORDER BY created_at DESC LIMIT 5;"
 ```
 
@@ -379,14 +379,14 @@ If all steps pass, you have confirmed:
 
 ```bash
 podman compose restart runbook-indexer
-podman logs DocLocalAI-runbook-indexer
+podman logs doclocalai-runbook-indexer
 ```
 
 ### Generic answers only?
 
 ```bash
 # Check if embeddings exist
-podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+podman exec doclocalai-db psql -U doclocalai -d doclocalai -c \
   "SELECT COUNT(*) FROM runbook_chunks WHERE embedding IS NOT NULL;"
 ```
 
@@ -394,7 +394,7 @@ podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
 
 ```bash
 curl http://localhost:8000/health
-podman logs DocLocalAI-api
+podman logs doclocalai-api
 ```
 
 ---
