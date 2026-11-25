@@ -1,0 +1,50 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: doclocal-ai-runbook-indexer
+  namespace: doclocal-ai
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: runbook-indexer
+    spec:
+      restartPolicy: OnFailure
+      imagePullSecrets:
+        - name: quay-pull-secret
+      containers:
+        - name: indexer
+          image: quay.io/yonig/doclocalai-api:v8
+          imagePullPolicy: Always
+          command: ["python3", "/opt/app-root/src/scripts/index_runbooks.py"]
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          envFrom:
+            - configMapRef:
+                name: doclocal-ai-config
+            - secretRef:
+                name: doclocal-ai-secrets
+          volumeMounts:
+            - name: runbooks
+              mountPath: /runbooks
+              readOnly: true
+            - name: runbooks-uploads
+              mountPath: /runbooks-uploads
+      volumes:
+        - name: runbooks
+          configMap:
+            name: doclocal-ai-runbooks
+            optional: true
+        - name: runbooks-uploads
+          persistentVolumeClaim:
+            claimName: doclocal-ai-runbooks-pvc
+      # Uncomment if using private Quay.io repository
+      # imagePullSecrets:
+      # - name: quay-pull-secret

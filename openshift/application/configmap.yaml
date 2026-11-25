@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: doclocal-ai-config
+  namespace: doclocal-ai
+data:
+  APP_TITLE: "DocLocalAI — OpenShift Incident & Runbook Assistant"
+  APP_PAGE_TITLE: "DocLocalAI SRE Assistant"
+  HISTORY_WINDOW_SIZE: "12"
+  RAG_STRATEGY: "auto"
+  SIMILARITY_THRESHOLD: "0.4"
+  RUNBOOK_DIR: "/runbooks"
+  RUNBOOK_UPLOAD_DIR: "/runbooks-uploads"
+  VERIFY_SSL: "false"

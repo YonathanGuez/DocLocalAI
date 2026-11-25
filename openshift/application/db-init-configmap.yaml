@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: doclocal-ai-db-init
+  namespace: doclocal-ai
+data:
+  init.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    -- Tracks each conversation thread
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+        session_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(100) NOT NULL DEFAULT 'local-user',
+        title VARCHAR(255) NOT NULL DEFAULT 'New Discussion',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Persists every message turn
+    CREATE TABLE IF NOT EXISTS chat_messages (
+        message_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id UUID NOT NULL REFERENCES chat_sessions(session_id) ON DELETE CASCADE,
+        role VARCHAR(20) NOT NULL CHECK (role IN ('system', 'user', 'assistant')),
+        content TEXT NOT NULL,
+        model_version VARCHAR(100),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+    ON chat_messages(session_id, created_at ASC);
+
+    -- Stores runbook chunks and embeddings
+    CREATE TABLE IF NOT EXISTS runbook_chunks (
+        chunk_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        source_doc VARCHAR(255) NOT NULL,
+        chunk_index INT NOT NULL,
+        content TEXT NOT NULL,
+        embedding vector(768),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_runbook_embedding
+    ON runbook_chunks USING hnsw (embedding vector_cosine_ops);
+
+    -- Stores system prompt templates (built-in + user custom)
+    CREATE TABLE IF NOT EXISTS prompt_templates (
+        prompt_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL UNIQUE,
+        description TEXT,
+        prompt_text TEXT NOT NULL,
+        is_builtin BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Insert built-in prompts
+    INSERT INTO prompt_templates (name, description, prompt_text, is_builtin) VALUES
+    (
+        'Raw Mode',
+        'Shows only source references - prevents hallucination (best for small models)',
+        'You are {assistant_name}. Answer ONLY based on the documentation below.
+
+    RULES:
+    - If the documentation does NOT mention the exact topic, say: ''I don''t have documentation for this.''
+    - Copy commands EXACTLY as written in the documentation
+    - Do not use ANY knowledge outside the documentation
+    - If unsure, say you don''t know
+
+    {context}
+
+    Question: ',
+        TRUE
+    ),
+    (
+        'Synthesis Mode',
+        'LLM explains and summarizes content (best for 3B+ models)',
+        'You are {assistant_name}, a helpful knowledge base assistant.
+
+    **Task:** Read the documentation below and provide a concise, helpful answer.
+
+    **Format Requirements:**
+    1. Brief introduction (1 sentence)
+    2. Step-by-step solution (numbered list, max 5 steps)
+    3. Include relevant commands EXACTLY as shown
+    4. Keep response under 200 words
+
+    **Critical Rules:**
+    ❌ Do NOT repeat the same command multiple times
+    ❌ Do NOT add information not in the documentation
+    ❌ If documentation doesn''t cover the topic, say: "I don''t have documentation for this."
+    ✅ Be concise and direct
+
+    **Documentation:**
+    {context}
+
+    Provide a concise answer now:',
+        TRUE
+    )
+    ON CONFLICT (name) DO NOTHING;

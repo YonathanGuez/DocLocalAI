@@ -1,0 +1,99 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: doclocal-ai-db
+  namespace: doclocal-ai
+spec:
+  serviceName: doclocal-ai-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: doclocal-ai-db
+  template:
+    metadata:
+      labels:
+        app: doclocal-ai-db
+    spec:
+      imagePullSecrets:
+      - name: yonig-robot-pull-secret
+      containers:
+        - name: postgres
+          image: quay.io/yonig/tools/pgvector:pg16
+          ports:
+            - containerPort: 5432
+              name: postgres
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: doclocal-ai-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: doclocal-ai-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: doclocalai
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: db-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-script
+              mountPath: /docker-entrypoint-initdb.d
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - doclocalai
+                - -d
+                - doclocalai
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - doclocalai
+                - -d
+                - doclocalai
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: init-script
+          configMap:
+            name: doclocal-ai-db-init
+  volumeClaimTemplates:
+  - metadata:
+      name: db-data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doclocal-ai-db
+  namespace: doclocal-ai
+spec:
+  clusterIP: None
+  selector:
+    app: doclocal-ai-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres

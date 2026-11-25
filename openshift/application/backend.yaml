@@ -1,0 +1,87 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: doclocal-ai-runbooks-pvc
+  namespace: doclocal-ai
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: doclocal-ai-api
+  namespace: doclocal-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: doclocal-ai-api
+  template:
+    metadata:
+      labels:
+        app: doclocal-ai-api
+    spec:
+      imagePullSecrets:
+        - name: quay-pull-secret
+      containers:
+        - name: backend
+          image: quay.io/yonig/doclocalai-api:v8
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          env: []
+          envFrom:
+            - configMapRef:
+                name: doclocal-ai-config
+            - secretRef:
+                name: doclocal-ai-secrets
+          volumeMounts:
+            - name: runbooks
+              mountPath: /runbooks
+              readOnly: true
+            - name: runbooks-uploads
+              mountPath: /runbooks-uploads
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: runbooks
+          configMap:
+            name: doclocal-ai-runbooks
+            optional: true
+        - name: runbooks-uploads
+          persistentVolumeClaim:
+            claimName: doclocal-ai-runbooks-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doclocal-ai-api
+  namespace: doclocal-ai
+spec:
+  selector:
+    app: doclocal-ai-api
+  ports:
+    - port: 8000
+      targetPort: 8000
