@@ -14,11 +14,16 @@ def chat(req: ChatRequest):
 
     chat_service = ChatService()
 
-    with Database.get_connection() as conn:
-        assistant_reply, model_used = chat_service.process_chat(
-            conn,
-            req.session_id,
-            req.message
-        )
-
-    return ChatResponse(reply=assistant_reply, model_used=model_used)
+    try:
+        with Database.get_connection() as conn:
+            assistant_reply, model_used = chat_service.process_chat(
+                conn,
+                req.session_id,
+                req.message
+            )
+        return ChatResponse(reply=assistant_reply, model_used=model_used)
+    except Exception as e:
+        print(f"🔴 CHAT ERROR: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise

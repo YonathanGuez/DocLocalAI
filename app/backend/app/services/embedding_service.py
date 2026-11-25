@@ -1,4 +1,5 @@
 from openai import OpenAI
+import httpx
 from app.config import settings
 from app.exceptions import LLMException
 
@@ -7,9 +8,11 @@ class EmbeddingService:
     def __init__(self):
         self.client = None
         if settings.embedding_endpoint_url and settings.embedding_model_name:
+            http_client = httpx.Client(verify=False)
             self.client = OpenAI(
                 base_url=settings.embedding_endpoint_url,
-                api_key=settings.llm_api_token
+                api_key=settings.llm_api_token,
+                http_client=http_client
             )
 
     def get_embedding(self, text: str) -> list[float] | None:

@@ -1,4 +1,5 @@
 from openai import OpenAI
+import httpx
 from psycopg import Connection
 from app.config import settings
 from app.repositories import SessionRepository, MessageRepository, RunbookRepository, PromptRepository
@@ -8,9 +9,11 @@ from app.exceptions import LLMException
 
 class ChatService:
     def __init__(self):
+        http_client = httpx.Client(verify=False)
         self.llm_client = OpenAI(
             base_url=settings.llm_endpoint_url,
-            api_key=settings.llm_api_token
+            api_key=settings.llm_api_token,
+            http_client=http_client
         )
         self.embedding_service = EmbeddingService()
 
@@ -202,26 +205,42 @@ class ChatService:
         message: str
     ) -> tuple[str, str]:
         """Process a chat message end-to-end"""
-        # Create/update session
-        title_preview = message[:60] + ("..." if len(message) > 60 else "")
-        SessionRepository.create_or_update(conn, session_id, title_preview)
+        try:
+            # Create/update session
+            print(f"📝 Creating/updating session {session_id}")
+            title_preview = message[:60] + ("..." if len(message) > 60 else "")
+            SessionRepository.create_or_update(conn, session_id, title_preview)
+            print(f"✅ Session created/updated")
 
-        # Save user message
-        MessageRepository.save_message(conn, session_id, "user", message)
+            # Save user message
+            print(f"💬 Saving user message")
+            MessageRepository.save_message(conn, session_id, "user", message)
+            print(f"✅ User message saved")
 
-        # Generate AI response
-        assistant_reply = self.generate_response(conn, session_id, message)
+            # Generate AI response
+            print(f"🤖 Generating AI response")
+            assistant_reply = self.generate_response(conn, session_id, message)
+            print(f"✅ AI response generated: {assistant_reply[:100]}...")
 
-        # Save assistant reply
-        MessageRepository.save_message(
-            conn,
-            session_id,
-            "assistant",
-            assistant_reply,
-            settings.llm_model_name
-        )
+            # Save assistant reply
+            print(f"💾 Saving assistant reply")
+            MessageRepository.save_message(
+                conn,
+                session_id,
+                "assistant",
+                assistant_reply,
+                settings.llm_model_name
+            )
+            print(f"✅ Assistant reply saved")
 
-        # Update session timestamp
-        SessionRepository.touch_session(conn, session_id)
+            # Update session timestamp
+            print(f"⏰ Updating session timestamp")
+            SessionRepository.touch_session(conn, session_id)
+            print(f"✅ Session timestamp updated")
 
-        return assistant_reply, settings.llm_model_name
+            return assistant_reply, settings.llm_model_name
+        except Exception as e:
+            print(f"❌ Error in process_chat: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
