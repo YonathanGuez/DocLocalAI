@@ -111,18 +111,7 @@ podman-compose logs -f ollama-init
 - **Auto-Chunking**: Splits docs into 500-char semantic chunks
 - **Vector Embeddings**: nomic-embed-text model (768 dimensions)
 - **Similarity Search**: Sub-second retrieval with cosine distance
-- **Runbook Viewer**: Click source citations to view full runbook content inline
-
----
-
-## 📖 Documentation
-
-| Document                                                      | Description                                         |
-| ------------------------------------------------------------- | --------------------------------------------------- |
-| **[ARCHITECTURE.md](DocLocalAI-app/backend/ARCHITECTURE.md)** | Backend architecture, security, and design patterns |
-| **[RAG_STRATEGY.md](DocLocalAI-app/backend/RAG_STRATEGY.md)** | RAG modes, model selection, and configuration       |
-| **[USE_CASE.md](USE_CASE.md)**                                | Complete walkthrough and testing guide              |
-| **[runbooks/README.md](runbooks/README.md)**                  | How to add and manage runbooks                      |
+- **Runbook Viewer**: Click source citations to view full runbook content inlineS
 
 ---
 
@@ -131,46 +120,46 @@ podman-compose logs -f ollama-init
 ```mermaid
 graph TB
     Browser[🌐 Browser]
-    
+
     subgraph UI["Streamlit UI :8501"]
         Chat[💬 Chat Interface]
         Sessions[📋 Session Management]
         Upload[📤 Upload Runbooks]
         ViewDocs[📖 View Documentation]
     end
-    
+
     subgraph Backend["FastAPI Backend :8000"]
         subgraph Routers
             SessionRouter[sessions.py]
             ChatRouter[chat.py]
             RunbookRouter[runbooks.py]
         end
-        
+
         subgraph Services
             ChatService[chat_service]
             EmbeddingService[embedding]
         end
-        
+
         subgraph Repositories
             SessionRepo[session_repo]
             MessageRepo[message_repo]
             RunbookRepo[runbook_repo]
         end
     end
-    
+
     subgraph Database["PostgreSQL + pgvector :5432"]
         Sessions_DB[(Sessions)]
         Messages_DB[(Messages)]
         Runbooks_DB[(Runbooks)]
     end
-    
+
     subgraph LLM["Ollama :11434"]
         Model[🤖 qwen2.5:0.5b]
         Embeddings[🔤 nomic-embed-text]
     end
-    
+
     Indexer[🔄 Auto-Indexer<br/>- On upload<br/>- On delete<br/>- Cleanup orphans]
-    
+
     Browser --> UI
     UI --> Routers
     Routers --> Services
@@ -180,7 +169,7 @@ graph TB
     RunbookRouter -.->|triggers| Indexer
     Indexer --> Database
     Indexer --> LLM
-    
+
     style Browser fill:#bdbdbd,stroke:#616161,stroke-width:2px,color:#000
     style UI fill:#ffb74d,stroke:#f57c00,stroke-width:2px,color:#000
     style Backend fill:#64b5f6,stroke:#1976d2,stroke-width:2px,color:#000
