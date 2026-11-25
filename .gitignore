@@ -1,7 +1,7 @@
 # Backup files
-frontend/requirements.txt.backup.*
-backend/requirements.txt.backup.*
-
+app/frontend/requirements.txt.backup.*
+app/backend/requirements.txt.backup.*
+openshift/application/generated-secrets.yaml
 # Pipeline scripts
 
 pipeline/*

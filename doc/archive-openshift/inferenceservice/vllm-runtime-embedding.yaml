@@ -1,0 +1,59 @@
+---
+# vLLM ServingRuntime for Embeddings
+# Uses vLLM's embedding mode (--task embed)
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: vllm-embedding
+  namespace: doclocal-ai-models
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "vLLM Embedding Runtime"
+    opendatahub.io/apiProtocol: REST
+    opendatahub.io/modelServingSupport: '["single"]'
+spec:
+  annotations:
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
+  containers:
+  - name: kserve-container
+    image: quay.io/opendatahub/vllm:stable
+    command:
+    - python
+    - -m
+    - vllm.entrypoints.openai.api_server
+    args:
+    - --model
+    - /mnt/models
+    - --port
+    - "8080"
+    - --task
+    - embed                        # ← EMBEDDING MODE
+    - --dtype
+    - auto
+    - --gpu-memory-utilization
+    - "0.95"                       # Use most of allocated GPU memory
+    - --trust-remote-code
+    env:
+    - name: HF_HOME
+      value: /tmp/hf_home
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  multiModel: false
+  supportedModelFormats:
+  - autoSelect: true
+    name: pytorch
+    version: "1"
+  - autoSelect: true
+    name: huggingface
+    version: "1"
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 2Gi

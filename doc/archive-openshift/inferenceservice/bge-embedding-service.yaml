@@ -1,0 +1,41 @@
+---
+# BGE Embedding using vLLM (GPU-accelerated)
+# Alternative to TEI - uses same runtime family as Qwen
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: bge-vllm
+  namespace: doclocal-ai-models
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "BGE Embeddings (vLLM/GPU)"
+    serving.kserve.io/deploymentMode: RawDeployment
+    serving.kubeflow.org/deploymentMode: RawDeployment
+    opendatahub.io/template-name: vllm-embedding
+    opendatahub.io/template-display-name: "vLLM Embedding Runtime"
+    storage.kserve.io/storageKey: "bge-huggingface-uri"
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    model:
+      modelFormat:
+        name: pytorch
+      runtime: vllm-embedding
+      storageUri: hf://BAAI/bge-small-en-v1.5
+      env:
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: huggingface-token
+              key: HF_TOKEN
+              optional: true
+      resources:
+        requests:
+          cpu: "2"
+          memory: 2Gi
+        limits:
+          cpu: "4"
+          memory: 4Gi
+          nvidia.com/gpu: "1"  # Share GPU with Qwen (fast enough for embeddings)

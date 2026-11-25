@@ -1,0 +1,40 @@
+---
+# Qwen 2.5 1.5B Instruct Model Deployment - GPU Sharing Mode
+# Optimized to share GPU with nomic-embed model
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen-15b
+  namespace: doclocal-ai-models
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "Qwen 2.5 1.5B Instruct (Shared GPU)"
+    serving.kserve.io/deploymentMode: RawDeployment
+    serving.kubeflow.org/deploymentMode: RawDeployment
+    opendatahub.io/template-name: vllm-runtime-shared
+    opendatahub.io/template-display-name: "vLLM Runtime (GPU)"
+    storage.kserve.io/storageKey: "qwen-huggingface-uri"
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    model:
+      modelFormat:
+        name: pytorch
+      runtime: vllm-runtime-shared  # Uses the shared runtime
+      storageUri: hf://Qwen/Qwen2.5-1.5B-Instruct
+      env:
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: huggingface-token
+              key: HF_TOKEN
+      resources:
+        requests:
+          cpu: "2"
+          memory: 6Gi           # Reduced from 8Gi
+        limits:
+          cpu: "4"
+          memory: 12Gi          # Reduced from 16Gi
+          nvidia.com/gpu: "1"

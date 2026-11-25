@@ -1,0 +1,62 @@
+---
+# vLLM ServingRuntime - Optimized for GPU Sharing
+# Configured to run both Qwen (generation) and Nomic-Embed (embeddings) on same GPU
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: vllm-runtime-shared
+  namespace: doclocal-ai-models
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "vLLM Runtime (GPU Shared)"
+    opendatahub.io/apiProtocol: REST
+    opendatahub.io/modelServingSupport: '["single"]'
+    opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
+spec:
+  annotations:
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
+  containers:
+  - name: kserve-container
+    image: quay.io/opendatahub/vllm:stable
+    command:
+    - python
+    - -m
+    - vllm.entrypoints.openai.api_server
+    args:
+    - --model
+    - /mnt/models
+    - --port
+    - "8080"
+    - --download-dir
+    - /models-cache
+    - --dtype
+    - auto
+    - --max-model-len
+    - "3072"                    # Reduced from 4096 (balances context vs memory)
+    - --gpu-memory-utilization
+    - "0.60"                    # Reduced from 0.90 (leaves room for embeddings)
+    - --trust-remote-code
+    env:
+    - name: HF_HOME
+      value: /tmp/hf_home
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  multiModel: false
+  supportedModelFormats:
+  - autoSelect: true
+    name: pytorch
+    version: "1"
+  - autoSelect: true
+    name: huggingface
+    version: "1"
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 2Gi
