@@ -413,20 +413,19 @@ SIMILARITY_THRESHOLD: "0.4" # 0.0-1.0
    EOF
    ````
 
-````
-
 2. **Re-index**:
 
- ```bash
- podman-compose restart runbook-indexer
- podman logs DocLocalAI-runbook-indexer
- ```
+```bash
+podman-compose restart runbook-indexer
+podman logs DocLocalAI-runbook-indexer
+```
 
 3. **Verify indexing**:
- ```bash
- podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
-   "SELECT source_doc, COUNT(*) FROM runbook_chunks GROUP BY source_doc;"
- ```
+
+```bash
+podman exec DocLocalAI-db psql -U DocLocalAI -d DocLocalAI -c \
+  "SELECT source_doc, COUNT(*) FROM runbook_chunks GROUP BY source_doc;"
+```
 
 ### Storage Architecture
 
@@ -543,4 +542,3 @@ Contributions welcome! Please:
 ## ⭐ Star History
 
 If you find this project useful, please consider giving it a star!
-````
