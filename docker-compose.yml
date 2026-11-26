@@ -47,6 +47,13 @@ services:
         ollama pull nomic-embed-text
         echo "Local models ready."
 
+  backend-tests:
+    build:
+      context: ./app/backend
+      target: test
+    container_name: backend-tests
+    profiles: ["test"]
+
   api:
     build:
       context: ./app/backend
