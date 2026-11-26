@@ -80,7 +80,7 @@ def test_retrieve_context_reranks_broad_recall_set_by_default(chat_service, mock
     # "pods.md" has lexical overlap with "pod error"; "network.md" has none,
     # so the reranked ordering should put pods.md first with a blended score.
     assert sources == ["pods.md"]
-    assert score == pytest.approx(0.7 * 0.5 + 0.3 * 0.9)
+    assert score == pytest.approx(0.85 * 0.5 + 0.15 * 0.9)
 
 
 def test_retrieve_context_hybrid_search_failure_falls_back_to_vector_search(chat_service, mocker, monkeypatch):
