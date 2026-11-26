@@ -37,6 +37,13 @@ def get_runbook_content(filename: str):
             file_path = RUNBOOKS_DIR / filename
             source = "sample"
 
+        # If not found in samples, check the demo/test-fixture subfolder
+        # (kept out of the main listing on purpose, but still viewable by
+        # source filename when cited in a chat answer)
+        if not file_path.exists():
+            file_path = RUNBOOKS_DIR / "demo" / filename
+            source = "sample"
+
         if not file_path.exists():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

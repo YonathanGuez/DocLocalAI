@@ -9,6 +9,18 @@
 
 ## 🆕 Recent Updates
 
+✨ **Advanced Retrieval Pipeline** — see **[RAG_IMPROVEMENTS.md](./RAG_IMPROVEMENTS.md)** for the full write-up with before/after examples and Mermaid diagrams for every change
+
+- **Hybrid search**: BM25 full-text + vector search, fused with Reciprocal Rank Fusion (catches exact commands/codes that pure vector search misses)
+- **Two-stage re-ranking**: broad recall (top-20) narrowed to top-k with lexical re-ranking
+- **Contextual retrieval**: chunks embedded with document context prefixed (Anthropic's Contextual Retrieval pattern)
+- **Markdown-aware chunking**: headers, paragraphs, and code fences are never split mid-block
+- **Query transformation**: ambiguous queries trigger a clarification prompt; follow-ups are rewritten standalone using chat history; synonym expansion broadens recall
+- **Query routing**: "what runbooks do you have?" and "...in the 'x.md' runbook..." are answered directly/scoped instead of going through a generic vector search
+- **Inline per-claim citations**: responses cite `[1]`, `[2]` per claim, validated against the retrieved chunks
+- **Output guardrails**: responses are scanned for leaked credentials (blocked) and destructive commands (flagged)
+- **Content deduplication**: identical chunk content across runbooks is only embedded/stored once
+
 ✨ **Intelligent Relevance Detection**
 
 - Similarity threshold (40%) detects when no relevant docs exist
@@ -77,9 +89,14 @@ podman-compose logs -f ollama-init
   - Shows "No documentation found" when relevance is too low
   - Displays relevance percentage on every response
   - Suggests rephrasing or uploading relevant content
-- **Vector Search**: pgvector finds most relevant runbook chunks
+- **Hybrid Search**: pgvector cosine similarity + Postgres full-text search (BM25-style), fused with Reciprocal Rank Fusion
+- **Re-ranking**: broad recall (top-20) re-ranked by lexical overlap before truncating to the final top-k, counters "Lost in the Middle"
+- **Query Routing & Transformation**: list/browse and scoped-by-filename queries are answered directly; ambiguous queries ask for clarification; follow-ups are rewritten using chat history
+- **Inline Citations**: responses cite `[1]`, `[2]` per claim when the model supports it, validated against retrieved chunks
+- **Output Guardrails**: responses are scanned for leaked credentials (blocked) and destructive commands (flagged)
 - **Source Citations**: Every answer shows which runbook it came from
 - **Generic & Customizable**: Works for any domain (not just OpenShift)
+- Full details: **[RAG_IMPROVEMENTS.md](./RAG_IMPROVEMENTS.md)**
 
 ### 💬 **Chat Interface**
 
@@ -108,9 +125,11 @@ podman-compose logs -f ollama-init
   - **Orphan Cleanup**: Deleted files automatically removed from vector database
 - **Dual Storage**: Sample runbooks (read-only) + user uploads (persistent volume)
 - **Easy Indexing**: Drop markdown files in `runbooks/` directory
-- **Auto-Chunking**: Splits docs into 500-char semantic chunks
+- **Markdown-Aware Chunking**: Splits docs into ~500-char chunks without breaking headers, paragraphs, or code fences mid-block
+- **Contextual Retrieval**: each chunk is embedded with a document-context prefix for better recall (raw text is still what's stored/shown)
+- **Deduplication**: identical chunk content across runbooks is embedded/stored only once (content-hash based)
 - **Vector Embeddings**: nomic-embed-text model (768 dimensions)
-- **Similarity Search**: Sub-second retrieval with cosine distance
+- **Similarity Search**: Sub-second retrieval with cosine distance + hybrid full-text search
 - **Runbook Viewer**: Click source citations to view full runbook content inlineS
 
 ---
@@ -138,12 +157,16 @@ graph TB
         subgraph Services
             ChatService[chat_service]
             EmbeddingService[embedding]
+            QueryRouter[query_router]
+            QueryTransform[query_transform]
+            Reranker[reranker_service]
+            Citations[citations]
         end
 
         subgraph Repositories
             SessionRepo[session_repo]
             MessageRepo[message_repo]
-            RunbookRepo[runbook_repo]
+            RunbookRepo["runbook_repo<br/>(hybrid search + RRF)"]
         end
     end
 
@@ -311,9 +334,15 @@ environment:
   HISTORY_WINDOW_SIZE: "12"       # Conversation context
   MAX_TOKENS: "400"                # Response length limit (lower prevents repetition)
   TEMPERATURE: "0.1"               # Lower = less creative/hallucination
-  TOP_K_CONTEXT: "3"               # Runbook chunks to retrieve
+  TOP_K_CONTEXT: "3"               # Runbook chunks to retrieve (final, after re-ranking)
   RAG_STRATEGY: "auto"             # auto|raw|synthesis
   SIMILARITY_THRESHOLD: "0.4"      # 0.0-1.0, minimum relevance to show results
+
+  # Retrieval pipeline (see RAG_IMPROVEMENTS.md)
+  ENABLE_HYBRID_SEARCH: "true"     # BM25 + vector fused with RRF (falls back to vector-only on error)
+  ENABLE_RERANKER: "true"          # Lexical re-ranking of the broad recall set
+  INITIAL_RETRIEVAL_K: "20"        # Broad recall size before re-ranking
+  RERANK_THRESHOLD: "0.3"          # Min blended rerank score (different scale than cosine similarity)
 
   # Application
   APP_TITLE: "DocLocalAI — OpenShift Incident & Runbook Assistant"
@@ -532,7 +561,7 @@ Run the complete test walkthrough:
 2. **Add runbooks** - Drop `.md` files in `runbooks/`
 3. **Upgrade model** - Install 3B for better synthesis
 4. **Customize** - Adjust RAG strategy, temperature, etc.
-5. **Read docs** - See ARCHITECTURE.md and RAG_STRATEGY.md
+5. **Read docs** - See ARCHITECTURE.md, RAG_STRATEGY.md, and [RAG_IMPROVEMENTS.md](./RAG_IMPROVEMENTS.md) for the retrieval pipeline deep-dive
 
 ---
 
