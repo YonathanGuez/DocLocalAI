@@ -1,3 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
 # Backup files
 app/frontend/requirements.txt.backup.*
 app/backend/requirements.txt.backup.*
