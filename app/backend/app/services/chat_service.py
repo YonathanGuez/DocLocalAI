@@ -4,7 +4,14 @@ from psycopg import Connection
 from app.config import settings
 from app.repositories import SessionRepository, MessageRepository, RunbookRepository, PromptRepository
 from app.services.embedding_service import EmbeddingService
+from app.services.reranker_service import RerankerService
+from app.services.citations import build_context_with_citations, extract_citations, format_citations_footer
+from app.schemas.response_schema import BusinessRuleValidator
+from app.services.query_router import QueryType, extract_metadata_filter, route_query
+from app.services.query_transform import build_rewrite_prompt, expand_query, is_ambiguous, needs_history_rewrite
 from app.exceptions import LLMException
+
+CLARIFICATION_NEEDED = "CLARIFICATION_NEEDED"
 
 
 class ChatService:
@@ -16,49 +23,128 @@ class ChatService:
             http_client=http_client
         )
         self.embedding_service = EmbeddingService()
+        self.reranker = RerankerService()
 
-    def retrieve_context(self, conn: Connection, query: str) -> tuple[str, list[str], float]:
-        """Retrieve relevant context from runbooks using vector search
+    def retrieve_context(
+        self, conn: Connection, query: str, history: list[dict] | None = None
+    ) -> tuple[str, list[str], float, dict[str, tuple[str, str]]]:
+        """Retrieve relevant context from runbooks, routing the query first.
 
         Returns:
-            tuple: (context_text, list of source filenames, max_similarity_score)
+            tuple: (context_text, list of source filenames, max_similarity_score, chunk_map)
+            chunk_map maps "[N]" citation markers to (source, content) for inline citations.
         """
-        query_vector = self.embedding_service.get_embedding(query)
-
-        if not query_vector:
-            return "", [], 0.0
+        history = history or []
+        query_type = route_query(query)
 
         try:
-            rows = RunbookRepository.search_similar_chunks(
-                conn,
-                query_vector,
-                settings.top_k_context
-            )
+            if query_type == QueryType.LIST_SOURCES:
+                sources_rows = RunbookRepository.get_distinct_sources(conn)
+                if not sources_rows:
+                    return "No runbooks indexed yet.", [], 0.0, {}
+                context = "Available runbooks:\n" + "\n".join(
+                    f"- {src} ({count} sections)" for src, count in sources_rows
+                )
+                return context, [row[0] for row in sources_rows], 1.0, {}
+
+            # Resolve pronoun references against recent history before embedding
+            if needs_history_rewrite(query, history):
+                query = self._rewrite_standalone_query(query, history)
+
+            threshold = settings.similarity_threshold
+            if query_type == QueryType.METADATA_FILTER:
+                source_filter = extract_metadata_filter(query)
+                query_vector = self.embedding_service.get_embedding(query)
+                if not query_vector or not source_filter:
+                    return "", [], 0.0, {}
+                rows = RunbookRepository.search_similar_chunks_by_source(
+                    conn, query_vector, source_filter, settings.top_k_context
+                )
+            else:
+                rows, reranked = self._vector_search_with_expansion(conn, query)
+                # Reranked scores are a lexical/RRF blend, not raw cosine
+                # similarity, so they need their own threshold scale.
+                if reranked:
+                    threshold = settings.rerank_threshold
 
             if not rows:
-                return "No runbooks indexed yet.", [], 0.0
+                return "No runbooks indexed yet.", [], 0.0, {}
 
             # Filter by similarity threshold
             relevant_rows = [(source, content, score) for source, content, score in rows
-                            if score >= settings.similarity_threshold]
+                            if score >= threshold]
 
             if not relevant_rows:
                 # No chunks meet the similarity threshold
                 max_score = max([r[2] for r in rows]) if rows else 0.0
-                return f"No relevant runbooks found (max similarity: {max_score:.2f}, threshold: {settings.similarity_threshold:.2f})", [], max_score
+                return f"No relevant runbooks found (max similarity: {max_score:.2f}, threshold: {threshold:.2f})", [], max_score, {}
 
             # Extract unique source files from relevant results
             sources = list(set([r[0] for r in relevant_rows]))
 
-            # Build context with source markers
-            context = "\n\n".join([f"[Source: {r[0]}]\n{r[1]}" for r in relevant_rows])
+            # Build context with inline [N] citation markers
+            context, chunk_map = build_context_with_citations(relevant_rows)
 
             # Get max similarity score
             max_score = max([r[2] for r in relevant_rows])
 
-            return context, sources, max_score
+            return context, sources, max_score, chunk_map
         except Exception as exc:
-            return f"Context lookup skipped: {exc}", [], 0.0
+            return f"Context lookup skipped: {exc}", [], 0.0, {}
+
+    def _vector_search_with_expansion(
+        self, conn: Connection, query: str
+    ) -> tuple[list[tuple[str, str, float]], bool]:
+        """Search the base query plus a few synonym expansions, merging by best score.
+
+        Retrieves a broad recall set (hybrid BM25+vector when enabled) and
+        narrows it to top_k_context with lexical re-ranking when enabled.
+
+        Returns: (rows, was_reranked)
+        """
+        best_by_key: dict[tuple[str, str], tuple[str, str, float]] = {}
+        recall_k = settings.initial_retrieval_k if settings.enable_reranker else settings.top_k_context
+
+        for variant in expand_query(query):
+            query_vector = self.embedding_service.get_embedding(variant)
+            if not query_vector:
+                continue
+
+            rows = None
+            if settings.enable_hybrid_search:
+                try:
+                    rows = RunbookRepository.hybrid_search(conn, variant, query_vector, recall_k)
+                except Exception:
+                    rows = None
+            if rows is None:
+                rows = RunbookRepository.search_similar_chunks(conn, query_vector, recall_k)
+
+            for source, content, score in rows:
+                key = (source, content)
+                if key not in best_by_key or score > best_by_key[key][2]:
+                    best_by_key[key] = (source, content, score)
+
+        merged = sorted(best_by_key.values(), key=lambda r: r[2], reverse=True)[:recall_k]
+
+        if settings.enable_reranker and merged:
+            return self.reranker.rerank(query, merged, top_k=settings.top_k_context), True
+
+        return merged[:settings.top_k_context], False
+
+    def _rewrite_standalone_query(self, query: str, history: list[dict]) -> str:
+        """Use the LLM to resolve pronoun references against recent history."""
+        try:
+            prompt = build_rewrite_prompt(query, history)
+            response = self.llm_client.chat.completions.create(
+                model=settings.llm_model_name,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=100,
+            )
+            rewritten = response.choices[0].message.content.strip()
+            return rewritten or query
+        except Exception:
+            return query
 
     def format_raw_retrieval(self, context: str, sources: list[str], similarity: float) -> str:
         """Format response with ONLY source references (no content chunks)
@@ -100,8 +186,31 @@ class ChatService:
         user_message: str
     ) -> str:
         """Generate AI response for user message"""
-        # Retrieve runbook context, sources, and similarity score
-        context, sources, similarity = self.retrieve_context(conn, user_message)
+        # Get conversation history up front so it can inform query rewriting
+        history = MessageRepository.get_conversation_history(
+            conn,
+            session_id,
+            settings.history_window_size
+        )
+
+        # Ask for clarification on truly vague queries we can't resolve from history
+        if is_ambiguous(user_message) and not needs_history_rewrite(user_message, history):
+            return (
+                "🤔 **Could you clarify your question?**\n\n"
+                "Your question is quite broad. Try asking about a specific topic, "
+                "command, or error you're seeing."
+            )
+
+        # Retrieve runbook context, sources, similarity score, and citation map
+        context, sources, similarity, chunk_map = self.retrieve_context(conn, user_message, history)
+
+        # List/browse queries are answered directly from the retrieved listing;
+        # routing them through the LLM risks it misreading the listing as "no docs".
+        if route_query(user_message) == QueryType.LIST_SOURCES and sources:
+            return (
+                "📚 **Here are the runbooks I have access to:**\n\n"
+                + "\n".join(f"- {source}" for source in sources)
+            )
 
         # If no relevant sources found, return helpful message
         if not sources:
@@ -117,13 +226,6 @@ class ChatService:
 
         if "No runbooks indexed" in context:
             return "⚠️ **No runbooks have been uploaded yet.**\n\nPlease upload runbooks via the sidebar to get started."
-
-        # Get conversation history
-        history = MessageRepository.get_conversation_history(
-            conn,
-            session_id,
-            settings.history_window_size
-        )
 
         # Build system prompt using template from database
         assistant_name = settings.app_title.split("—")[0].strip() if "—" in settings.app_title else settings.app_title
@@ -185,11 +287,26 @@ class ChatService:
             )
             response = completion.choices[0].message.content
 
-            # Automatically append source citations if sources were used
+            # Block responses that leak credentials or suggest destructive commands,
+            # even though the documentation is the only source the model was given.
+            leaked_credential = BusinessRuleValidator.find_credential_leak(response)
+            if leaked_credential:
+                return "❌ Response blocked: may contain sensitive credentials."
+
+            dangerous_command = BusinessRuleValidator.find_dangerous_command(response)
+            if dangerous_command:
+                response = f"⚠️ **SAFETY WARNING:** response contained a potentially destructive command and was flagged.\n\n{response}"
+
+            # Prefer per-claim [N] citations when the model actually used them,
+            # otherwise fall back to a generic source list.
+            citation_details = extract_citations(response, chunk_map)
+            footer = format_citations_footer(citation_details)
             if sources:
-                source_citation = f"\n\n*Relevance: {similarity:.1%}*"
-                source_citation += "\n\n---\n📚 **Source:** " + ", ".join(sources)
-                response += source_citation
+                response += f"\n\n*Relevance: {similarity:.1%}*"
+                if footer:
+                    response += footer
+                else:
+                    response += "\n\n---\n📚 **Source:** " + ", ".join(sources)
 
             return response
         except Exception as e:

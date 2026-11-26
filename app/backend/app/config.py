@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     top_k_context: int = 3
     similarity_threshold: float = 0.4  # Minimum similarity score (0.0-1.0) to consider a chunk relevant
 
+    # Retrieval pipeline (hybrid search + re-ranking)
+    enable_hybrid_search: bool = True  # BM25 + vector fused with RRF (falls back to vector-only on error)
+    enable_reranker: bool = True  # Lexical re-ranking of the broad recall set before truncating to top_k
+    initial_retrieval_k: int = 20  # Broad recall size before re-ranking
+    rerank_threshold: float = 0.3  # Minimum blended rerank score (different scale than cosine similarity)
+
     # RAG strategy: "auto", "raw", "synthesis", or custom prompt name
     # - auto: Use raw for small models (<3B), synthesis for larger
     # - raw: Use "Raw Mode" prompt template
