@@ -189,6 +189,19 @@ graph TB
 
 ---
 
+## ☁️ Deployment on OpenShift & OpenShift AI
+
+In addition to running locally with Podman/Docker Compose + Ollama, DocLocalAI can be deployed on **OpenShift** with model serving on **OpenShift AI**:
+
+- **Qwen 2.5 1.5B Instruct** — text generation, served via llm-d / vLLM (OpenAI-compatible `/v1/chat/completions`)
+- **BGE-Small-EN-v1.5** — embeddings, served via llm-d / vLLM (OpenAI-compatible `/v1/embeddings`, 384 dimensions)
+
+This setup replaces the local Ollama service with HuggingFace models deployed as `LLMInferenceService` resources on OpenShift AI, while the rest of the stack (FastAPI backend, Streamlit UI, PostgreSQL + pgvector) runs as standard OpenShift workloads.
+
+See **[openshift/README.md](./openshift/README.md)** for full deployment instructions, resource sizing, and dashboard/CLI steps.
+
+---
+
 ## 🎯 Usage
 
 ### Ask Questions
@@ -502,7 +515,7 @@ Run the complete test walkthrough:
 - ✅ Persistent storage (named volumes)
 - ✅ Containerized with Podman/Docker Compose
 - ✅ Comprehensive documentation
-- ✅ OpenShift deployment ready
+- ✅ OpenShift deployment ready, with OpenShift AI model serving (Qwen 2.5 1.5B + BGE-Small-EN-v1.5)
 
 ---
 
