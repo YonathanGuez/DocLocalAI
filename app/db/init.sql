@@ -30,11 +30,31 @@ CREATE TABLE IF NOT EXISTS runbook_chunks (
     chunk_index INT NOT NULL,
     content TEXT NOT NULL,
     embedding vector(768),
+    content_hash VARCHAR(64),
+    content_tsv tsvector,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_runbook_embedding
 ON runbook_chunks USING hnsw (embedding vector_cosine_ops);
+
+CREATE INDEX IF NOT EXISTS idx_runbook_content_hash
+ON runbook_chunks(content_hash);
+
+-- Full-text search index for hybrid (BM25-style) lexical search
+CREATE INDEX IF NOT EXISTS idx_runbook_content_fts
+ON runbook_chunks USING gin(content_tsv);
+
+CREATE OR REPLACE FUNCTION runbook_chunks_tsv_trigger() RETURNS trigger AS $$
+BEGIN
+    NEW.content_tsv := to_tsvector('english', COALESCE(NEW.content, ''));
+    RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tsvector_update ON runbook_chunks;
+CREATE TRIGGER tsvector_update BEFORE INSERT OR UPDATE OF content
+ON runbook_chunks FOR EACH ROW EXECUTE FUNCTION runbook_chunks_tsv_trigger();
 
 -- Stores system prompt templates (built-in + user custom)
 CREATE TABLE IF NOT EXISTS prompt_templates (
@@ -77,6 +97,8 @@ Question: ',
 2. Step-by-step solution (numbered list, max 5 steps)
 3. Include relevant commands EXACTLY as shown
 4. Keep response under 200 words
+5. Cite the chunk number in brackets, e.g. [1], after each factual claim using the
+   [N] markers shown before each documentation excerpt below
 
 **Critical Rules:**
 ❌ Do NOT repeat the same command multiple times
