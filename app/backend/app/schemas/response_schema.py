@@ -30,7 +30,7 @@ class RunbookResponse(BaseModel):
 
 
 _DANGEROUS_COMMAND_PATTERNS = (
-    re.compile(r"rm\s+-rf\s+/(?!\S)"),
+    re.compile(r"rm\s+-rf\s+/(?!\w)"),
     re.compile(r"\bmkfs\b"),
     re.compile(r"dd\s+if=\S+\s+of=/dev/"),
     re.compile(r":\(\)\s*\{\s*:\|:&\s*\};:"),  # fork bomb
