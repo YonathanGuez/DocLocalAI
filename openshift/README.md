@@ -44,19 +44,22 @@ Deploy HuggingFace models: Qwen 2.5 1.5B (text generation) + BGE-Small-EN-v1.5 (
 
 ### Both Models on GPU
 
-**Choice**: Both Qwen and BGE use GPU acceleration
+**Choice**: Both Qwen and BGE use GPU acceleration, each with an explicit `--gpu-memory-utilization` cap
 
 **Reasons:**
 
-- ✅ Faster embeddings (GPU vs CPU)
-- ✅ llm-d manages GPU allocation efficiently
-- ✅ Plenty of GPU memory available (L4 has 23 GB)
+- ✅ Faster embeddings (GPU vs CPU) — there's no CPU-only vLLM runtime available via the default OpenShift AI preset anyway
+- ✅ Single-GPU clusters (no MIG/time-slicing) can't give BGE its own `nvidia.com/gpu` request, so both models must share the one card
+- ✅ vLLM's default `--gpu-memory-utilization` (0.9) is per-process and doesn't know about other tenants on the same GPU — left uncapped, Qwen alone reserves ~92% of memory, starving BGE on startup (`CrashLoopBackOff` / `MinimumReplicasUnavailable`)
+- ✅ Explicit caps via `VLLM_ADDITIONAL_ARGS: --gpu-memory-utilization <value>` on both services keep their combined reservation safely under the card's total
 
 **Resource allocation:**
 
-- Qwen: ~3 GB GPU memory
-- BGE: ~0.5 GB GPU memory
-- Free: ~19.5 GB for other workloads
+- Qwen: capped to `0.7` (~15.4 GB on a 22 GB card)
+- BGE: capped to `0.1` (~2.2 GB — bge-small is a 133 MB model)
+- Free: ~4.4 GB headroom
+
+*(If your cluster has multiple GPUs or MIG/time-slicing, prefer giving BGE its own `nvidia.com/gpu` request instead of sharing via utilization caps.)*
 
 ### Model Size Selection
 

@@ -2,7 +2,7 @@
 #
 # Master deployment script - deploys everything in order
 #
-set -e
+set -eo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -30,13 +30,23 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 if [ -z "${HF_TOKEN}" ]; then
-  echo "⚠️  HF_TOKEN not set - skipping AI models deployment"
-  echo "   Set HF_TOKEN and run: ./scripts/deploy-models.sh"
-  echo ""
-else
-  "$SCRIPT_DIR/deploy-models.sh"
-  echo ""
+  echo "❌ HF_TOKEN not set - cannot deploy AI models"
+  echo "   Set HF_TOKEN and re-run: export HF_TOKEN=hf_your_token_here"
+  exit 1
 fi
+
+if ! "$SCRIPT_DIR/deploy-models.sh"; then
+  echo ""
+  echo "❌ deploy-models.sh failed - aborting deployment"
+  exit 1
+fi
+echo ""
+if ! "$SCRIPT_DIR/check-models-ready.sh"; then
+  echo ""
+  echo "❌ AI models did not become Ready - aborting deployment"
+  exit 1
+fi
+echo ""
 
 # Step 2: Deploy Application Stack
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

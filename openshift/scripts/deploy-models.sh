@@ -4,7 +4,7 @@
 # This replaces the old InferenceService deployment
 #
 
-set -e
+set -eo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 MODELS_DIR="$SCRIPT_DIR/../ai-models"
@@ -30,7 +30,35 @@ echo ""
 
 # Create namespace if it doesn't exist
 echo "📦 Ensuring namespace exists..."
-oc create namespace doclocal-ai-models 2>/dev/null || echo "Namespace already exists"
+if oc get namespace doclocal-ai-models &>/dev/null; then
+  echo "Namespace already exists"
+else
+  oc create namespace doclocal-ai-models
+fi
+echo ""
+
+# Check that the inference gateway authorizes routes from our namespace
+GATEWAY_NAME="openshift-ai-inference"
+GATEWAY_NS="openshift-ingress"
+TARGET_NS="doclocal-ai-models"
+
+echo "🔎 Checking gateway '$GATEWAY_NAME' authorizes namespace '$TARGET_NS'..."
+ALLOWED_NAMESPACES=$(oc get gateway "$GATEWAY_NAME" -n "$GATEWAY_NS" \
+  -o jsonpath='{.spec.listeners[0].allowedRoutes.namespaces.selector.matchExpressions[0].values}' 2>/dev/null)
+
+if echo "$ALLOWED_NAMESPACES" | grep -q "\"$TARGET_NS\""; then
+  echo "✅ Gateway already authorizes namespace '$TARGET_NS'"
+else
+  echo "⚠️  Namespace '$TARGET_NS' not authorized on gateway yet, patching..."
+  oc patch gateway "$GATEWAY_NAME" -n "$GATEWAY_NS" --type=json -p='[
+    {
+      "op": "add",
+      "path": "/spec/listeners/0/allowedRoutes/namespaces/selector/matchExpressions/0/values/-",
+      "value": "'"$TARGET_NS"'"
+    }
+  ]' 2>/dev/null && echo "✅ Gateway patched to authorize '$TARGET_NS'" \
+    || echo "❌ Gateway patch failed (may not exist or insufficient permissions)"
+fi
 echo ""
 
 # Create HuggingFace token secret

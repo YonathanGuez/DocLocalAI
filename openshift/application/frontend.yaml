@@ -18,7 +18,7 @@ spec:
         - name: quay-pull-secret
       containers:
         - name: frontend
-          image: quay.io/yonig/doclocalai-ui:v1
+          image: quay.io/yonig/doclocalai-ui:v10
           imagePullPolicy: Always
           ports:
             - containerPort: 8501

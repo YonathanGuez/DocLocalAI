@@ -224,6 +224,8 @@ In addition to running locally with Podman/Docker Compose + Ollama, DocLocalAI c
 
 This setup replaces the local Ollama service with HuggingFace models deployed as `LLMInferenceService` resources on OpenShift AI, while the rest of the stack (FastAPI backend, Streamlit UI, PostgreSQL + pgvector) runs as standard OpenShift workloads.
 
+On single-GPU clusters, both models share the one GPU with explicit `--gpu-memory-utilization` caps (instead of BGE trying to run "CPU-only", which the default serving image doesn't actually support) — see [openshift/README.md](./openshift/README.md#both-models-on-gpu) for why.
+
 See **[openshift/README.md](./openshift/README.md)** for full deployment instructions, resource sizing, and dashboard/CLI steps.
 
 ---

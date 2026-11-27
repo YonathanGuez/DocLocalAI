@@ -16,7 +16,7 @@ spec:
         - name: quay-pull-secret
       containers:
         - name: indexer
-          image: quay.io/yonig/doclocalai-api:v8
+          image: quay.io/yonig/doclocalai-api:v10
           imagePullPolicy: Always
           command: ["python3", "/opt/app-root/src/scripts/index_runbooks.py"]
           resources:

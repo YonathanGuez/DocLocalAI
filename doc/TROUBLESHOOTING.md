@@ -28,6 +28,7 @@
 | 20  | Indexer INSERT fails: `column "chunk_index" does not exist` | Table schema was missing a column the script required                                           | `ALTER TABLE runbook_chunks ADD COLUMN chunk_index INTEGER`                                            |
 | 21  | Production: `password authentication failed for user "doclocalai"` | `deploy-app.sh` regenerated the DB secret on every run; Postgres only applies `POSTGRES_PASSWORD` on first `initdb`, so it kept the old password | Synced Postgres's role password to the secret via `ALTER ROLE`; script now deletes the old secret before regenerating |
 | 22  | Indexer INSERT fails: `column "content_hash" does not exist` | `openshift/application/db-init-configmap.yaml` schema had drifted from `app/db/init.sql` (missing `content_hash`/`content_tsv`/FTS); `embedding` also hardcoded `vector(768)` vs BGE's actual 384 dims | Synced the ConfigMap to the local schema with `vector(384)`; recreated the (empty) live table to match |
+| 23  | Upload/search broken after fresh redeploy - embeddings fail with generic `Connection error` | `template-secrets.yaml` hardcoded `LLM_API_TOKEN: ""`; empty token → `Authorization: Bearer ` (trailing space) → httpx rejects it as an illegal header before the request is sent | Set `LLM_API_TOKEN: "not-needed"` in the template (not just the live secret); removed the dead `sed` line that targeted the old placeholder |
 
 ---
 
