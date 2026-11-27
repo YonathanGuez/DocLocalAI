@@ -1,6 +1,8 @@
 ---
 # BGE Small EN v1.5 - LLMInferenceService (Embeddings)
-# Full UI integration with hardware profile and connection
+# No separate GPU is requested/available on this cluster (single-GPU node, already
+# claimed by qwen-llm), so this shares qwen's physical GPU. Its memory footprint is
+# capped way down via --gpu-memory-utilization since the model itself is tiny.
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceService
 metadata:
@@ -10,8 +12,6 @@ metadata:
     opendatahub.io/dashboard: "true"
   annotations:
     opendatahub.io/connections: "bge"
-    opendatahub.io/hardware-profile-name: "gpu-profile"
-    opendatahub.io/hardware-profile-namespace: "redhat-ods-applications"
     opendatahub.io/model-type: "generative"
     openshift.io/display-name: "BGE Small EN v1.5 (Embeddings)"
     security.opendatahub.io/enable-auth: "false"
@@ -35,12 +35,12 @@ spec:
             key: HF_TOKEN
       - name: VLLM_TASK
         value: "embed"
+      - name: VLLM_ADDITIONAL_ARGS
+        value: "--gpu-memory-utilization 0.1"
       resources:
         requests:
           cpu: "2"
           memory: 4Gi
-          nvidia.com/gpu: "1"
         limits:
           cpu: "4"
           memory: 8Gi
-          nvidia.com/gpu: "1"

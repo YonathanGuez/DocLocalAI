@@ -26,6 +26,8 @@
 | 18  | Indexer job crashes, script file not found                  | Image built from `app/backend/` couldn't `COPY` the sibling `scripts/` directory                | Built the image from the repo root instead                                                             |
 | 19  | Indexer chunks all fail with SSL `Connection error`         | Indexer script's OpenAI client was missing the same SSL fix as the backend                      | Added `httpx.Client(verify=False)` to `scripts/index_runbooks.py`                                      |
 | 20  | Indexer INSERT fails: `column "chunk_index" does not exist` | Table schema was missing a column the script required                                           | `ALTER TABLE runbook_chunks ADD COLUMN chunk_index INTEGER`                                            |
+| 21  | Production: `password authentication failed for user "doclocalai"` | `deploy-app.sh` regenerated the DB secret on every run; Postgres only applies `POSTGRES_PASSWORD` on first `initdb`, so it kept the old password | Synced Postgres's role password to the secret via `ALTER ROLE`; script now deletes the old secret before regenerating |
+| 22  | Indexer INSERT fails: `column "content_hash" does not exist` | `openshift/application/db-init-configmap.yaml` schema had drifted from `app/db/init.sql` (missing `content_hash`/`content_tsv`/FTS); `embedding` also hardcoded `vector(768)` vs BGE's actual 384 dims | Synced the ConfigMap to the local schema with `vector(384)`; recreated the (empty) live table to match |
 
 ---
 
@@ -1992,5 +1994,154 @@ CREATE TABLE runbook_chunks (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ```
+
+---
+
+## Issue 21: Production - DB Password Desync After Redeploy
+
+**Symptom**: Backend continuously fails to reach the database. Postgres logs show, repeatedly:
+
+```
+FATAL:  password authentication failed for user "doclocalai"
+DETAIL:  Connection matched file "/var/lib/postgresql/data/pgdata/pg_hba.conf" line 128: "host all all all scram-sha-256"
+```
+
+Backend logs show a healthy `/health` (200 OK, doesn't touch the DB) alongside a connection pool failing from the very first request:
+
+```
+error connecting in 'pool-1': connection failed: connection to server at "10.128.1.28", port 5432 failed: FATAL:  password authentication failed for user "doclocalai"
+psycopg_pool.PoolTimeout: couldn't get a connection after 30.00 sec
+```
+
+**How Found**:
+
+```bash
+# Current secret's password
+PW=$(oc get secret doclocal-ai-secrets -n doclocal-ai -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+
+# ⚠️ This "succeeds" but is a FALSE POSITIVE - loopback is `trust`-authed, no
+# password is actually checked:
+oc exec -n doclocal-ai doclocal-ai-db-0 -- bash -c "PGPASSWORD='$PW' psql -h 127.0.0.1 -U doclocalai -d doclocalai -c 'select 1;'"
+
+# The REAL test - over the service/pod IP, which hits the password-checked rule:
+oc exec -n doclocal-ai doclocal-ai-db-0 -- bash -c "PGPASSWORD='$PW' psql -h doclocal-ai-db -U doclocalai -d doclocalai -c 'select 1;'"
+# FATAL: password authentication failed for user "doclocalai"  ← confirms real mismatch
+
+# Confirmed via pg_hba.conf:
+oc exec -n doclocal-ai doclocal-ai-db-0 -- cat /var/lib/postgresql/data/pgdata/pg_hba.conf
+#   local   all   all                    trust       ← loopback bypasses password check
+#   host    all   all   127.0.0.1/32     trust
+#   host    all   all   all              scram-sha-256   ← real traffic hits this one
+```
+
+**Root Cause**: `deploy-app.sh` ran `DB_PASSWORD=$(openssl rand -hex 16)` unconditionally and re-applied the `<namespace>-secrets` Secret on **every** invocation, even against an already-initialized database. Postgres only applies `POSTGRES_PASSWORD` the first time it runs `initdb` on an empty PVC — on every later start it keeps whatever password is already in its role catalog. Running the deploy script a second time (without wiping the DB) regenerated the Secret with a brand-new password that the backend picked up immediately, while Postgres kept the original one — a silent split between "what the Secret says" and "what Postgres actually has."
+
+**Solution (live fix, zero downtime, no data loss)**: Push the password from the current Secret into Postgres directly, using the pod's trusted local socket (bypasses the mismatch since local connections don't check a password):
+
+```bash
+NS=doclocal-ai
+PW=$(oc get secret doclocal-ai-secrets -n $NS -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+oc exec -n $NS doclocal-ai-db-0 -- psql -U doclocalai -d doclocalai -v ON_ERROR_STOP=1 \
+  -c "ALTER ROLE doclocalai WITH PASSWORD '${PW}';"
+```
+
+The backend's existing connection pool recovers on its own within seconds — no pod restart needed.
+
+**Script Fix**: `deploy-app.sh` now deletes any existing `<namespace>-secrets` Secret before generating a new one, so a stale secret from a prior run can't linger:
+
+```bash
+oc delete secret "${NAMESPACE}-secrets" -n "$NAMESPACE" --ignore-not-found
+DB_PASSWORD=$(openssl rand -hex 16)
+```
+
+**⚠️ Caveat**: This prevents a stale Secret object from lingering, but it does **not** by itself keep Postgres's actual stored password in sync — regenerating the password and redeploying against an **already-initialized** database (non-empty PVC) will reproduce this exact issue again. If that happens, re-run the `ALTER ROLE` sync above. For a true clean reset, wipe the database's PVC so `initdb` re-runs with the new password.
+
+**Result**: ✅ Backend reconnects immediately; root cause documented so it's recognized instantly next time instead of re-diagnosed from scratch.
+
+---
+
+## Issue 22: `content_hash` Column Missing + Wrong Vector Dimension (OpenShift Schema Drift)
+
+**Symptom**: Runbook indexing fails on every chunk:
+
+```
+ERROR: column "content_hash" of relation "runbook_chunks" does not exist at character 95
+STATEMENT:
+INSERT INTO runbook_chunks (source_doc, chunk_index, content, embedding, content_hash)
+VALUES ($1, $2, $3, $4, $5)
+ERROR: current transaction is aborted, commands ignored until end of transaction block
+```
+
+**How Found**: Compared the live table against the local docker-compose schema:
+
+```bash
+oc exec -n doclocal-ai doclocal-ai-db-0 -- psql -U doclocalai -d doclocalai -c '\d runbook_chunks'
+# Only had: chunk_id, source_doc, chunk_index, content, embedding vector(768), updated_at
+# Missing: content_hash, content_tsv (and its FTS trigger/index)
+```
+
+**Root Cause**: `openshift/application/db-init-configmap.yaml` is a separate, hand-maintained copy of the schema in `app/db/init.sql` (used by docker-compose) — and it had drifted. `content_hash` (dedup) and `content_tsv` + its trigger/GIN index (hybrid full-text search) were added to the local schema but never ported to the OpenShift ConfigMap, so `scripts/index_runbooks.py`'s 5-column insert (including `content_hash`) failed immediately against an OpenShift-provisioned database.
+
+Separately — **not actually caused by "using a different model than docker-compose," but adjacent to it** — both schema files hardcoded `embedding vector(768)` (matching local Ollama's `nomic-embed-text`), while this OpenShift deployment serves embeddings via **BGE-Small-EN-v1.5, confirmed live to return 384-dim vectors**:
+
+```bash
+oc run test-bge-dim --rm -i --restart=Never --image=curlimages/curl:latest -n doclocal-ai-models -- \
+  curl -sk -X POST https://bge-llm-kserve-workload-svc.doclocal-ai-models.svc.cluster.local:8000/v1/embeddings \
+  -H "Content-Type: application/json" -d '{"model":"bge-llm","input":"Hello world"}'
+# → embedding array length: 384
+```
+This would have surfaced as a second failure (`expected 768 dimensions, not 384`) right after fixing the missing column.
+
+**Solution**:
+
+1. Updated `openshift/application/db-init-configmap.yaml` to match `app/db/init.sql` (adds `content_hash`, `content_tsv` + trigger + GIN index), using `embedding vector(384)` instead of `vector(768)` to match BGE's real output.
+2. Applied the equivalent DDL live (table had 0 rows, so a straight recreate was safe):
+
+```bash
+oc exec -i -n doclocal-ai doclocal-ai-db-0 -- psql -U doclocalai -d doclocalai -v ON_ERROR_STOP=1 <<'EOF'
+DROP TABLE IF EXISTS runbook_chunks CASCADE;
+
+CREATE TABLE runbook_chunks (
+    chunk_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_doc VARCHAR(255) NOT NULL,
+    chunk_index INT NOT NULL,
+    content TEXT NOT NULL,
+    embedding vector(384),
+    content_hash VARCHAR(64),
+    content_tsv tsvector,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_runbook_embedding ON runbook_chunks USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_runbook_content_hash ON runbook_chunks(content_hash);
+CREATE INDEX idx_runbook_content_fts ON runbook_chunks USING gin(content_tsv);
+
+CREATE OR REPLACE FUNCTION runbook_chunks_tsv_trigger() RETURNS trigger AS $$
+BEGIN
+    NEW.content_tsv := to_tsvector('english', COALESCE(NEW.content, ''));
+    RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tsvector_update BEFORE INSERT OR UPDATE OF content
+ON runbook_chunks FOR EACH ROW EXECUTE FUNCTION runbook_chunks_tsv_trigger();
+EOF
+```
+
+**Gotcha**: `oc exec` needs `-i` to forward a heredoc's stdin into `psql` — without it, the commands are silently never sent (no error, nothing happens).
+
+**Verification**:
+
+```bash
+oc delete job doclocal-ai-runbook-indexer -n doclocal-ai --ignore-not-found
+oc apply -f openshift/application/runbook-indexer-job.yaml
+# ...
+# ✅ Indexed COE Process Client.md (18 chunks)
+# 📊 Indexing complete! Total chunks: 18
+```
+
+**⚠️ Caveat**: Like `db-init-configmap.yaml`'s other init SQL, this only applies automatically to a fresh/empty PVC. The local (`app/db/init.sql`) and OpenShift (`db-init-configmap.yaml`) schemas are two independently maintained copies with no shared migration mechanism — any future schema change must be ported to both by hand, and manually re-applied (via `ALTER TABLE`/recreate) to any database that's already running.
+
+**Result**: ✅ Runbook indexing works end-to-end on OpenShift, including dedup (`content_hash`) and hybrid full-text search (`content_tsv`).
 
 ---

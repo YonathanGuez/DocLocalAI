@@ -33,6 +33,10 @@ spec:
           secretKeyRef:
             name: huggingface-token
             key: HF_TOKEN
+      # Capped below vLLM's 0.9 default so bge-llm (sharing this node's single GPU,
+      # see bge-llm-service.yaml) has free GPU memory left to initialize into.
+      - name: VLLM_ADDITIONAL_ARGS
+        value: "--gpu-memory-utilization 0.7"
       resources:
         requests:
           cpu: "2"
