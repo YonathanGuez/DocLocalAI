@@ -2,6 +2,33 @@
 
 ---
 
+## 📋 Issues & Resolutions Index
+
+| #   | Issue                                                       | Root Cause                                                                                      | Resolution                                                                                             |
+| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1   | Pod `CrashLoopBackOff` on GPU model _(OLD)_                 | GPU memory full — another model (llama-32-3b) was using it                                      | Removed the unused llama-32-3b model                                                                   |
+| 2   | No external access to model endpoint                        | No route created                                                                                | `oc expose service <svc>`                                                                              |
+| 3   | Route returns "Application is not available"                | HTTP route pointed at an HTTPS (vLLM) service                                                   | Recreated as a `reencrypt` TLS route                                                                   |
+| 4   | Gateway route stuck, `NotAllowedByListeners`                | Namespace missing from the Gateway's allowed-namespace list                                     | Added the namespace to the Gateway's `allowedRoutes` selector                                          |
+| 5   | Dashboard warning: AuthPolicy CRD not available             | Token auth enabled, but the Red Hat Connectivity Link operator isn't installed                  | Ignore (dev/test), install the operator, or redeploy without token auth                                |
+| 6   | InferenceService stuck, `READY=Unknown` _(OLD)_             | `Serverless` deployment mode used, but Knative not installed                                    | Switched to `RawDeployment` mode                                                                       |
+| 7   | No runtime found for PyTorch model _(OLD)_                  | Missing `ServingRuntime` for vLLM                                                               | Created and deployed the vLLM `ServingRuntime` before the model                                        |
+| 8   | Nomic-embed fails to load on vLLM _(OLD)_                   | vLLM/storage-initializer can't fetch nomic-embed's custom config files                          | Moved to CPU-based or external embeddings                                                              |
+| 9   | GPU can't fit both Qwen and Nomic-Embed _(OLD)_             | Both models request exclusive GPU access                                                        | Lowered Qwen's `gpu-memory-utilization` 90%→60% to free headroom (embed model still failed separately) |
+| 10  | Nomic-embed still fails under vLLM embedding mode _(OLD)_   | Nomic-embed's custom architecture is unsupported by vLLM                                        | Switched to BGE-Small-EN-v1.5 (officially supported, runs on CPU)                                      |
+| 11  | Postgres pod `CrashLoopBackOff` on init                     | PVC mounted directly on the data dir; a stray `lost+found` dir blocks `initdb`                  | Point `PGDATA` at a subdirectory of the mount                                                          |
+| 12  | Backend pod stuck `Pending`                                 | Wrong `DATABASE_URL` hostname, and PVC requested `ReadWriteMany` (unsupported by AWS EBS)       | Fixed the hostname; changed the PVC to `ReadWriteOnce`                                                 |
+| 13  | Backend pod stuck `ContainerCreating`                       | Referenced runbooks ConfigMap didn't exist                                                      | Made the mount optional, or created the ConfigMap from `runbooks/`                                     |
+| 14  | Backend returns 503, SSL `CERTIFICATE_VERIFY_FAILED`        | Python `httpx` doesn't trust OpenShift's service-serving CA                                     | Disabled SSL verification in code (`httpx.Client(verify=False)`)                                       |
+| 15  | `Illegal header value b'Bearer '`                           | `LLM_API_TOKEN` secret was an empty string                                                      | Set the token to a non-empty placeholder (`"not-needed"`)                                              |
+| 16  | Chat returns 500, transaction aborted                       | `runbook_chunks.embedding` was `vector(768)`, but BGE returns 384-dim vectors                   | Recreated the column as `vector(384)`                                                                  |
+| 17  | Runbook upload "succeeds" but 0 chunks indexed              | Indexer Job had no `command:` override, so it ran the default `uvicorn` CMD instead of indexing | Added `command: ["python3", ".../index_runbooks.py"]` to the Job                                       |
+| 18  | Indexer job crashes, script file not found                  | Image built from `app/backend/` couldn't `COPY` the sibling `scripts/` directory                | Built the image from the repo root instead                                                             |
+| 19  | Indexer chunks all fail with SSL `Connection error`         | Indexer script's OpenAI client was missing the same SSL fix as the backend                      | Added `httpx.Client(verify=False)` to `scripts/index_runbooks.py`                                      |
+| 20  | Indexer INSERT fails: `column "chunk_index" does not exist` | Table schema was missing a column the script required                                           | `ALTER TABLE runbook_chunks ADD COLUMN chunk_index INTEGER`                                            |
+
+---
+
 ## ⚠️ IMPORTANT: Two Different Deployment Approaches
 
 This troubleshooting guide contains issues from **TWO different deployment methods**:
@@ -39,7 +66,7 @@ spec:
 - ❌ UI showed "Unknown" deployment resource
 - ❌ No hardware profile integration
 
-**Status**: ⚠️ **DEPRECATED** - Archived in `archive-inferenceservice/`
+**Status**: ⚠️ **DEPRECATED** - Archived in `archive-openshift/`
 
 ---
 
