@@ -9,7 +9,7 @@
 
 ## 🆕 Recent Updates
 
-✨ **Advanced Retrieval Pipeline** — see **[RAG_IMPROVEMENTS.md](./RAG_IMPROVEMENTS.md)** for the full write-up with before/after examples and Mermaid diagrams for every change
+✨ **Advanced Retrieval Pipeline** — see **[RAG_GUIDE.md](./RAG_GUIDE.md)** for the full write-up with before/after examples and Mermaid diagrams for every change
 
 - **Hybrid search**: BM25 full-text + vector search, fused with Reciprocal Rank Fusion (catches exact commands/codes that pure vector search misses)
 - **Two-stage re-ranking**: broad recall (top-20) narrowed to top-k with lexical re-ranking
@@ -96,7 +96,7 @@ podman-compose logs -f ollama-init
 - **Output Guardrails**: responses are scanned for leaked credentials (blocked) and destructive commands (flagged)
 - **Source Citations**: Every answer shows which runbook it came from
 - **Generic & Customizable**: Works for any domain (not just OpenShift)
-- Full details: **[RAG_IMPROVEMENTS.md](./RAG_IMPROVEMENTS.md)**
+- Full details: **[RAG_GUIDE.md](./RAG_GUIDE.md)**
 
 ### 💬 **Chat Interface**
 
@@ -152,6 +152,8 @@ graph TB
             SessionRouter[sessions.py]
             ChatRouter[chat.py]
             RunbookRouter[runbooks.py]
+            PromptRouter[prompts.py]
+            ConfigRouter[config.py]
         end
 
         subgraph Services
@@ -167,6 +169,7 @@ graph TB
             SessionRepo[session_repo]
             MessageRepo[message_repo]
             RunbookRepo["runbook_repo<br/>(hybrid search + RRF)"]
+            PromptRepo[prompt_repo]
         end
     end
 
@@ -312,7 +315,9 @@ SIMILARITY_THRESHOLD: "0.4"  # 0.0-1.0, minimum relevance (40% default)
 
 ### Environment Variables
 
-Edit `docker-compose.yml`:
+Edit `docker-compose.yml`. The `api` service and the `ui` service each read their own env vars — `APP_TITLE` is set independently on both (backend uses it to name itself in prompts, frontend uses it as the page heading), so the two can differ.
+
+**`api` service:**
 
 ```yaml
 environment:
@@ -338,22 +343,27 @@ environment:
   RAG_STRATEGY: "auto"             # auto|raw|synthesis
   SIMILARITY_THRESHOLD: "0.4"      # 0.0-1.0, minimum relevance to show results
 
-  # Retrieval pipeline (see RAG_IMPROVEMENTS.md)
+  # Retrieval pipeline (see RAG_GUIDE.md)
   ENABLE_HYBRID_SEARCH: "true"     # BM25 + vector fused with RRF (falls back to vector-only on error)
   ENABLE_RERANKER: "true"          # Lexical re-ranking of the broad recall set
   INITIAL_RETRIEVAL_K: "20"        # Broad recall size before re-ranking
   RERANK_THRESHOLD: "0.3"          # Min blended rerank score (different scale than cosine similarity)
 
-  # Application
+  # Application name used inside prompts
   APP_TITLE: "DocLocalAI — OpenShift Incident & Runbook Assistant"
 
   # Security
   CORS_ORIGINS: ["http://localhost:3000","http://localhost:5173"]
   RATE_LIMIT_PER_MINUTE: 60
+```
 
-  # UI Customization
-  APP_TITLE: "DocLocalAI — OpenShift Incident & Runbook Assistant"
-  APP_PAGE_TITLE: "DocLocalAI SRE Assistant"
+**`ui` service:**
+
+```yaml
+environment:
+  DOCLOCALAI_API_URL: http://api:8000
+  APP_TITLE: "DocLocalAI — OpenShift Incident & Runbook Assistant"  # Page heading
+  APP_PAGE_TITLE: "DocLocalAI Assistant"                             # Browser tab title
 ```
 
 ### Upgrade Models
@@ -561,7 +571,7 @@ Run the complete test walkthrough:
 2. **Add runbooks** - Drop `.md` files in `runbooks/`
 3. **Upgrade model** - Install 3B for better synthesis
 4. **Customize** - Adjust RAG strategy, temperature, etc.
-5. **Read docs** - See ARCHITECTURE.md, RAG_STRATEGY.md, and [RAG_IMPROVEMENTS.md](./RAG_IMPROVEMENTS.md) for the retrieval pipeline deep-dive
+5. **Read docs** - See ARCHITECTURE.md and [RAG_GUIDE.md](./RAG_GUIDE.md) for the retrieval pipeline deep-dive
 
 ---
 
