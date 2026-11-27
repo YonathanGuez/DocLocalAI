@@ -2146,3 +2146,71 @@ oc apply -f openshift/application/runbook-indexer-job.yaml
 **Result**: ✅ Runbook indexing works end-to-end on OpenShift, including dedup (`content_hash`) and hybrid full-text search (`content_tsv`).
 
 ---
+
+## Issue 23: Upload/Search Broken After Fresh Redeploy - `LLM_API_TOKEN` Regression
+
+**Symptom**: After a full teardown + redeploy, runbook upload and chat search both silently fail. Backend logs show embedding calls failing with a generic connection error:
+
+```
+httpx.LocalProtocolError: Illegal header value b'Bearer '
+
+openai.APIConnectionError: Connection error.
+  File "/opt/app-root/src/app/services/embedding_service.py", line 24, in get_embedding
+    response = self.client.embeddings.create(
+```
+
+**How Found**:
+
+```bash
+# Confirmed the token itself was empty in the running pod:
+oc exec -n doclocal-ai <api-pod> -- printenv LLM_API_TOKEN
+# (empty)
+
+# Direct embedding test reproduced it immediately:
+oc exec -n doclocal-ai <api-pod> -- python3 -c "
+from app.services.embedding_service import EmbeddingService
+EmbeddingService().get_embedding('test')
+"
+```
+
+**Root Cause**: This is a **regression of Issue 14** (`Illegal header value b'Bearer '`). That issue was originally fixed by changing the value directly in the generated/live Secret, but the actual source of truth, `openshift/application/template-secrets.yaml`, still hardcoded:
+
+```yaml
+LLM_API_TOKEN: ""
+```
+
+`deploy-app.sh` also still had `sed "s/<LLM_API_TOKEN>//g"` left over from an older version of the template that used a `<LLM_API_TOKEN>` placeholder — by the time of this issue the template no longer had that placeholder at all, so the `sed` was dead code substituting nothing into nothing. Nothing in the deploy path ever set a non-empty token. The fix "stuck" only as long as nobody tore down and redeployed from scratch; a fresh `teardown-app.sh` + `deploy-app.sh` regenerated the secret from the still-broken template and brought the bug straight back.
+
+`EmbeddingService` (and `ChatService`) both use `settings.llm_api_token` as the `api_key` for their `OpenAI(...)` client, so an empty token breaks embeddings (upload indexing + query-time search) the same way it breaks chat.
+
+**Solution**:
+
+1. Fixed the actual source of truth in `openshift/application/template-secrets.yaml`:
+   ```yaml
+   LLM_API_TOKEN: "not-needed"
+   ```
+2. Removed the dead `sed "s/<LLM_API_TOKEN>//g"` line from `deploy-app.sh` - the template now has a literal value, not a placeholder.
+3. Fixed the already-running cluster without a redeploy:
+   ```bash
+   oc patch secret doclocal-ai-secrets -n doclocal-ai --type=merge -p '{"stringData":{"LLM_API_TOKEN":"not-needed"}}'
+   oc rollout restart deployment/doclocal-ai-api -n doclocal-ai
+   ```
+
+**Verification**:
+
+```bash
+oc exec -n doclocal-ai <api-pod> -- python3 -c "
+from app.services.embedding_service import EmbeddingService
+print(len(EmbeddingService().get_embedding('test query')))
+"
+# 384
+
+curl -X POST .../api/chat -d '{"session_id":"...","message":"what runbooks do you have?"}'
+# {"reply":"📚 Here are the runbooks I have access to: ...", "model_used":"qwen-llm"}
+```
+
+**⚠️ Lesson**: A fix applied only to a live Secret/ConfigMap (not to the template/script that generates it) is not actually fixed — it's postponed until the next clean redeploy. Issues 14, 21, and 22 in this document are all instances of the same pattern: always confirm the fix lives in the file under version control, not just in `oc patch`/`oc edit` against the running cluster.
+
+**Result**: ✅ Upload and search both work again; the fix now survives a full teardown + redeploy.
+
+---
