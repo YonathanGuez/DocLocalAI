@@ -9,7 +9,7 @@ class QueryType(Enum):
 
 
 _LIST_PHRASES = (
-    "what runbooks", "list runbooks", "show me all",
+    "what runbooks", "list runbooks", "show me all", "which runbooks do you have",
     "what do you have", "available documents", "available runbooks",
 )
 
